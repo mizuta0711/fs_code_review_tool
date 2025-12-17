@@ -48,6 +48,11 @@ export const aiProviderRepository = {
    * @returns 作成されたプロバイダー設定
    */
   create: async (data: CreateAIProviderInput): Promise<AIProviderConfig> => {
+    // パスワードは空文字列でない場合のみハッシュ化
+    const hashedPassword = data.password && data.password.length > 0
+      ? hashPassword(data.password)
+      : null;
+
     return prisma.aIProviderConfig.create({
       data: {
         name: data.name,
@@ -56,7 +61,7 @@ export const aiProviderRepository = {
         endpoint: data.endpoint || null,
         deployment: data.deployment || null,
         model: data.model || null,
-        password: data.password ? hashPassword(data.password) : null,
+        password: hashedPassword,
         isActive: false,
       },
     });
