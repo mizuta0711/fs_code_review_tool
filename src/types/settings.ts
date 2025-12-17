@@ -9,8 +9,7 @@ import type { AIProviderType } from "@/lib/constants";
  */
 export interface Settings {
   id: string;
-  aiProvider: AIProviderType;
-  createdAt: Date;
+  aiProvider: string;
   updatedAt: Date;
 }
 

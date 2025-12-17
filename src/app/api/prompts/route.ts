@@ -1,62 +1,48 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+/**
+ * プロンプトAPI
+ * GET  /api/prompts - プロンプト一覧取得
+ * POST /api/prompts - プロンプト作成
+ */
+import { NextRequest } from "next/server";
+import { promptService } from "@/features/prompt/services/promptService.server";
+import { createPromptSchema } from "@/lib/validation/prompt";
+import {
+  createSuccessResponse,
+  validateRequestBody,
+  handleApiError,
+} from "@/lib/api-helpers";
+import { ERROR_MESSAGES, HTTP_STATUS } from "@/lib/constants";
 
-// GET /api/prompts - プロンプト一覧取得
+/**
+ * GET /api/prompts - プロンプト一覧取得
+ */
 export async function GET() {
   try {
-    const prompts = await prisma.prompt.findMany({
-      orderBy: [
-        { isDefault: "desc" },
-        { updatedAt: "desc" },
-      ],
-    });
-
-    return NextResponse.json(prompts);
+    const prompts = await promptService.getAll();
+    return createSuccessResponse(prompts);
   } catch (error) {
     console.error("Failed to fetch prompts:", error);
-    return NextResponse.json(
-      { error: "プロンプトの取得に失敗しました" },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }
 
-// POST /api/prompts - プロンプト作成
+/**
+ * POST /api/prompts - プロンプト作成
+ */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, description, content } = body;
 
     // バリデーション
-    if (!name || typeof name !== "string" || name.trim().length === 0) {
-      return NextResponse.json(
-        { error: "プロンプト名は必須です" },
-        { status: 400 }
-      );
+    const validation = validateRequestBody(createPromptSchema, body);
+    if (!validation.success) {
+      return validation.error;
     }
 
-    if (!content || typeof content !== "string" || content.trim().length === 0) {
-      return NextResponse.json(
-        { error: "プロンプト内容は必須です" },
-        { status: 400 }
-      );
-    }
-
-    const prompt = await prisma.prompt.create({
-      data: {
-        name: name.trim(),
-        description: description?.trim() || null,
-        content: content.trim(),
-        isDefault: false,
-      },
-    });
-
-    return NextResponse.json(prompt, { status: 201 });
+    const prompt = await promptService.create(validation.data);
+    return createSuccessResponse(prompt, HTTP_STATUS.CREATED);
   } catch (error) {
-    console.error("Failed to create prompt:", error);
-    return NextResponse.json(
-      { error: "プロンプトの作成に失敗しました" },
-      { status: 500 }
-    );
+    console.error(ERROR_MESSAGES.PROMPT.CREATE_FAILED, error);
+    return handleApiError(error);
   }
 }

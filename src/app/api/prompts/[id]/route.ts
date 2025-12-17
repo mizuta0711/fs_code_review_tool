@@ -1,124 +1,75 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+/**
+ * プロンプト詳細API
+ * GET    /api/prompts/[id] - プロンプト詳細取得
+ * PUT    /api/prompts/[id] - プロンプト更新
+ * DELETE /api/prompts/[id] - プロンプト削除
+ */
+import { NextRequest } from "next/server";
+import { promptService } from "@/features/prompt/services/promptService.server";
+import { updatePromptSchema } from "@/lib/validation/prompt";
+import {
+  createSuccessResponse,
+  validateRequestBody,
+  handleApiError,
+} from "@/lib/api-helpers";
+import { ERROR_MESSAGES } from "@/lib/constants";
+import type { RouteParams } from "@/types/api";
 
-type RouteParams = {
-  params: Promise<{ id: string }>;
-};
-
-// GET /api/prompts/[id] - プロンプト詳細取得
-export async function GET(request: NextRequest, { params }: RouteParams) {
+/**
+ * GET /api/prompts/[id] - プロンプト詳細取得
+ */
+export async function GET(
+  _request: NextRequest,
+  { params }: RouteParams
+) {
   try {
     const { id } = await params;
-
-    const prompt = await prisma.prompt.findUnique({
-      where: { id },
-    });
-
-    if (!prompt) {
-      return NextResponse.json(
-        { error: "プロンプトが見つかりません" },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json(prompt);
+    const prompt = await promptService.getById(id);
+    return createSuccessResponse(prompt);
   } catch (error) {
-    console.error("Failed to fetch prompt:", error);
-    return NextResponse.json(
-      { error: "プロンプトの取得に失敗しました" },
-      { status: 500 }
-    );
+    console.error(ERROR_MESSAGES.PROMPT.FETCH_FAILED, error);
+    return handleApiError(error);
   }
 }
 
-// PUT /api/prompts/[id] - プロンプト更新
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+/**
+ * PUT /api/prompts/[id] - プロンプト更新
+ */
+export async function PUT(
+  request: NextRequest,
+  { params }: RouteParams
+) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { name, description, content } = body;
-
-    // 存在確認
-    const existingPrompt = await prisma.prompt.findUnique({
-      where: { id },
-    });
-
-    if (!existingPrompt) {
-      return NextResponse.json(
-        { error: "プロンプトが見つかりません" },
-        { status: 404 }
-      );
-    }
 
     // バリデーション
-    if (name !== undefined && (typeof name !== "string" || name.trim().length === 0)) {
-      return NextResponse.json(
-        { error: "プロンプト名は空にできません" },
-        { status: 400 }
-      );
+    const validation = validateRequestBody(updatePromptSchema, body);
+    if (!validation.success) {
+      return validation.error;
     }
 
-    if (content !== undefined && (typeof content !== "string" || content.trim().length === 0)) {
-      return NextResponse.json(
-        { error: "プロンプト内容は空にできません" },
-        { status: 400 }
-      );
-    }
-
-    const prompt = await prisma.prompt.update({
-      where: { id },
-      data: {
-        ...(name !== undefined && { name: name.trim() }),
-        ...(description !== undefined && { description: description?.trim() || null }),
-        ...(content !== undefined && { content: content.trim() }),
-      },
-    });
-
-    return NextResponse.json(prompt);
+    const prompt = await promptService.update(id, validation.data);
+    return createSuccessResponse(prompt);
   } catch (error) {
-    console.error("Failed to update prompt:", error);
-    return NextResponse.json(
-      { error: "プロンプトの更新に失敗しました" },
-      { status: 500 }
-    );
+    console.error(ERROR_MESSAGES.PROMPT.UPDATE_FAILED, error);
+    return handleApiError(error);
   }
 }
 
-// DELETE /api/prompts/[id] - プロンプト削除
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+/**
+ * DELETE /api/prompts/[id] - プロンプト削除
+ */
+export async function DELETE(
+  _request: NextRequest,
+  { params }: RouteParams
+) {
   try {
     const { id } = await params;
-
-    // 存在確認
-    const existingPrompt = await prisma.prompt.findUnique({
-      where: { id },
-    });
-
-    if (!existingPrompt) {
-      return NextResponse.json(
-        { error: "プロンプトが見つかりません" },
-        { status: 404 }
-      );
-    }
-
-    // デフォルトプロンプトは削除不可
-    if (existingPrompt.isDefault) {
-      return NextResponse.json(
-        { error: "デフォルトプロンプトは削除できません" },
-        { status: 400 }
-      );
-    }
-
-    await prisma.prompt.delete({
-      where: { id },
-    });
-
-    return NextResponse.json({ message: "プロンプトを削除しました" });
+    await promptService.delete(id);
+    return createSuccessResponse({ message: "プロンプトを削除しました" });
   } catch (error) {
-    console.error("Failed to delete prompt:", error);
-    return NextResponse.json(
-      { error: "プロンプトの削除に失敗しました" },
-      { status: 500 }
-    );
+    console.error(ERROR_MESSAGES.PROMPT.DELETE_FAILED, error);
+    return handleApiError(error);
   }
 }
