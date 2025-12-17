@@ -41,9 +41,17 @@
       "Bash(git config:*)",
       "Bash(git push:*)",
       "Bash(npx shadcn@latest init -d)",
-      "Bash(npx shadcn@latest add:*)"
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(npm show:*)",
+      "mcp__serena__find_file",
+      "mcp__serena__list_dir",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "serena"
+  ]
 }
