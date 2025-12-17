@@ -32,3 +32,11 @@ export {
   updateSettingsSchema,
   type UpdateSettingsInput,
 } from "./settings";
+
+// AIプロバイダー関連スキーマ
+export {
+  createAIProviderSchema,
+  updateAIProviderSchema,
+  type CreateAIProviderInput,
+  type UpdateAIProviderInput,
+} from "./ai-provider";

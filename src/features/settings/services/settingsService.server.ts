@@ -3,6 +3,7 @@
  * ビジネスロジック層 - 設定管理のビジネスルールを実装
  */
 import { settingsRepository } from "../repositories/settingsRepository.server";
+import { aiProviderService } from "@/features/ai-provider/services/aiProviderService.server";
 import { AI_PROVIDERS } from "@/lib/constants";
 import { logger, createTimer } from "@/lib/logger";
 import type { Setting } from "@prisma/client";
@@ -12,7 +13,7 @@ import type { ProviderStatusMap, SettingsResponse } from "@/types/settings";
 const SERVICE_NAME = "settingsService";
 
 /**
- * プロバイダーの設定状態を取得
+ * フォールバック用のプロバイダー設定状態を取得
  * @returns プロバイダー状態マップ
  */
 function getProviderStatus(): ProviderStatusMap {
@@ -26,6 +27,9 @@ function getProviderStatus(): ProviderStatusMap {
         process.env.AZURE_OPENAI_API_KEY &&
         process.env.AZURE_OPENAI_DEPLOYMENT
       ),
+    },
+    [AI_PROVIDERS.CLAUDE]: {
+      configured: !!process.env.ANTHROPIC_API_KEY,
     },
   };
 }
@@ -44,14 +48,16 @@ export const settingsService = {
 
     const setting = await settingsRepository.findOrCreate();
     const providerStatus = getProviderStatus();
+    const activeProvider = await aiProviderService.getActive();
 
     logger.serviceEnd(SERVICE_NAME, "get", timer.elapsed(), {
-      provider: setting.aiProvider,
+      activeProviderId: setting.activeProviderId,
     });
 
     return {
       ...setting,
       providerStatus,
+      activeProvider,
     };
   },
 
@@ -62,29 +68,17 @@ export const settingsService = {
    */
   update: async (input: UpdateSettingsInput): Promise<Setting> => {
     const timer = createTimer();
-    logger.serviceStart(SERVICE_NAME, "update", { provider: input.aiProvider });
+    logger.serviceStart(SERVICE_NAME, "update", {
+      activeProviderId: input.activeProviderId,
+    });
 
     const setting = await settingsRepository.upsert(input);
 
     logger.serviceEnd(SERVICE_NAME, "update", timer.elapsed());
-    logger.info("Settings updated", { provider: setting.aiProvider });
-    return setting;
-  },
-
-  /**
-   * 現在のAIプロバイダーを取得
-   * @returns AIプロバイダー名
-   */
-  getCurrentProvider: async (): Promise<string> => {
-    const timer = createTimer();
-    logger.serviceStart(SERVICE_NAME, "getCurrentProvider");
-
-    const setting = await settingsRepository.findOrCreate();
-
-    logger.serviceEnd(SERVICE_NAME, "getCurrentProvider", timer.elapsed(), {
-      provider: setting.aiProvider,
+    logger.info("Settings updated", {
+      activeProviderId: setting.activeProviderId,
     });
-    return setting.aiProvider;
+    return setting;
   },
 
   /**

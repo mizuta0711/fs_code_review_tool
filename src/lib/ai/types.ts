@@ -29,4 +29,12 @@ export interface LanguageModelClient {
 }
 
 // AIプロバイダー種別
-export type AIProvider = "gemini" | "azure-openai";
+export type AIProvider = "gemini" | "azure-openai" | "claude";
+
+// AIクライアント設定
+export interface AIClientConfig {
+  apiKey?: string;
+  model?: string;
+  endpoint?: string;
+  deployment?: string;
+}

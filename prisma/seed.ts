@@ -77,16 +77,16 @@ async function main() {
   });
   console.log(`Created/Updated prompt: ${simplePrompt.name}`);
 
-  // 設定の初期化
+  // 設定の初期化（activeProviderIdは後から設定される）
   const setting = await prisma.setting.upsert({
     where: { id: "default" },
     update: {},
     create: {
       id: "default",
-      aiProvider: "gemini",
+      activeProviderId: null,
     },
   });
-  console.log(`Created/Updated setting: aiProvider=${setting.aiProvider}`);
+  console.log(`Created/Updated setting: activeProviderId=${setting.activeProviderId || "not set"}`);
 
   console.log("Seeding completed!");
 }

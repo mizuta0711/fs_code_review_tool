@@ -3,12 +3,13 @@
  * ビジネスロジック層 - コードレビューのビジネスルールを実装
  */
 import { promptService } from "@/features/prompt/services/promptService.server";
-import { settingsService } from "@/features/settings/services/settingsService.server";
+import { aiProviderService } from "@/features/ai-provider/services/aiProviderService.server";
 import { createAIClient } from "@/lib/ai";
-import { NotFoundError, AppError } from "@/lib/api-helpers";
+import { decrypt } from "@/lib/crypto";
+import { NotFoundError, AppError, UnauthorizedError } from "@/lib/api-helpers";
 import { ERROR_MESSAGES, ERROR_CODES, HTTP_STATUS } from "@/lib/constants";
 import { logger, createTimer } from "@/lib/logger";
-import type { AIProvider, CodeFile, ReviewedFile } from "@/lib/ai/types";
+import type { AIProvider, CodeFile, ReviewedFile, AIClientConfig } from "@/lib/ai/types";
 import type { ReviewRequestInput } from "@/lib/validation/review";
 
 const SERVICE_NAME = "reviewService";
@@ -19,6 +20,7 @@ const SERVICE_NAME = "reviewService";
 export interface ReviewResult {
   reviewedFiles: ReviewedFile[];
   provider: AIProvider;
+  providerName: string;
   promptId: string;
   promptName: string;
 }
@@ -31,7 +33,8 @@ export const reviewService = {
    * コードレビューを実行
    * @param input レビューリクエスト
    * @returns レビュー結果
-   * @throws NotFoundError プロンプトが見つからない場合
+   * @throws NotFoundError プロンプトまたはAIプロバイダーが見つからない場合
+   * @throws UnauthorizedError パスワードが無効な場合
    * @throws AppError AIクライアント初期化失敗、タイムアウト、レート制限など
    */
   execute: async (input: ReviewRequestInput): Promise<ReviewResult> => {
@@ -41,18 +44,57 @@ export const reviewService = {
       promptId: input.promptId,
     });
 
-    // 1. プロンプトの取得
+    // 1. アクティブなAIプロバイダーの取得
+    const providerConfig = await aiProviderService.getActiveFullConfig();
+    if (!providerConfig) {
+      throw new NotFoundError(
+        ERROR_MESSAGES.AI_PROVIDER.NOT_CONFIGURED,
+        ERROR_CODES.AI_PROVIDER_NOT_CONFIGURED
+      );
+    }
+
+    // 2. パスワード検証
+    if (!input.password) {
+      throw new AppError(
+        ERROR_MESSAGES.REVIEW.PASSWORD_REQUIRED,
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.REVIEW_PASSWORD_REQUIRED
+      );
+    }
+
+    const isPasswordValid = await aiProviderService.verifyPassword(
+      providerConfig.id,
+      input.password
+    );
+    if (!isPasswordValid) {
+      throw new UnauthorizedError(
+        ERROR_MESSAGES.REVIEW.PASSWORD_INVALID,
+        ERROR_CODES.REVIEW_PASSWORD_INVALID
+      );
+    }
+
+    // 3. プロンプトの取得
     logger.debug("Fetching prompt", { promptId: input.promptId });
     const prompt = await getPrompt(input.promptId);
 
-    // 2. AIプロバイダーの取得
-    const aiProvider = (await settingsService.getCurrentProvider()) as AIProvider;
-    logger.debug("Using AI provider", { provider: aiProvider });
+    // 4. AIクライアントの設定を準備
+    const aiProvider = providerConfig.provider as AIProvider;
+    const clientConfig: AIClientConfig = {
+      apiKey: decrypt(providerConfig.apiKey),
+      model: providerConfig.model || undefined,
+      endpoint: providerConfig.endpoint || undefined,
+      deployment: providerConfig.deployment || undefined,
+    };
 
-    // 3. AIクライアントの作成
-    const client = createAIClientSafe(aiProvider);
+    logger.debug("Using AI provider", {
+      provider: aiProvider,
+      providerName: providerConfig.name,
+    });
 
-    // 4. レビューの実行
+    // 5. AIクライアントの作成
+    const client = createAIClientSafe(aiProvider, clientConfig);
+
+    // 6. レビューの実行
     logger.info("Starting code review", {
       fileCount: input.files.length,
       provider: aiProvider,
@@ -73,6 +115,7 @@ export const reviewService = {
     return {
       reviewedFiles: result.reviewedFiles,
       provider: aiProvider,
+      providerName: providerConfig.name,
       promptId: prompt.id,
       promptName: prompt.name,
     };
@@ -116,11 +159,12 @@ async function getPrompt(promptId?: string) {
 /**
  * AIクライアントを安全に作成
  * @param provider AIプロバイダー
+ * @param config クライアント設定
  * @returns AIクライアント
  */
-function createAIClientSafe(provider: AIProvider) {
+function createAIClientSafe(provider: AIProvider, config: AIClientConfig) {
   try {
-    return createAIClient(provider);
+    return createAIClient(provider, config);
   } catch (error) {
     logger.error(
       "Failed to create AI client",

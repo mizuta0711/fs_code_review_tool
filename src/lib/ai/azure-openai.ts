@@ -1,19 +1,24 @@
 import { AzureOpenAI } from "openai";
-import type { LanguageModelClient, ReviewRequest, ReviewResponse } from "./types";
+import type {
+  LanguageModelClient,
+  ReviewRequest,
+  ReviewResponse,
+  AIClientConfig,
+} from "./types";
 
 export class AzureOpenAIClient implements LanguageModelClient {
   private client: AzureOpenAI;
   private deployment: string;
 
-  constructor() {
-    const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
-    const apiKey = process.env.AZURE_OPENAI_API_KEY;
-    const deployment = process.env.AZURE_OPENAI_DEPLOYMENT;
+  constructor(config?: AIClientConfig) {
+    const endpoint = config?.endpoint || process.env.AZURE_OPENAI_ENDPOINT;
+    const apiKey = config?.apiKey || process.env.AZURE_OPENAI_API_KEY;
+    const deployment = config?.deployment || process.env.AZURE_OPENAI_DEPLOYMENT;
     const apiVersion = process.env.AZURE_OPENAI_API_VERSION || "2024-10-21";
 
     if (!endpoint || !apiKey || !deployment) {
       throw new Error(
-        "Azure OpenAI configuration is incomplete. Required: AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, AZURE_OPENAI_DEPLOYMENT"
+        "Azure OpenAI configuration is incomplete. Required: endpoint, apiKey, deployment"
       );
     }
 

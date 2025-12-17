@@ -168,6 +168,16 @@ export class BusinessError extends AppError {
 }
 
 /**
+ * カスタムエラークラス: 認証エラー
+ */
+export class UnauthorizedError extends AppError {
+  constructor(message: string, code?: string) {
+    super(message, HTTP_STATUS.UNAUTHORIZED, code || "UNAUTHORIZED");
+    this.name = "UnauthorizedError";
+  }
+}
+
+/**
  * エラーをAPIレスポンスに変換
  */
 export function handleApiError(error: unknown): NextResponse<ApiErrorResponse> {

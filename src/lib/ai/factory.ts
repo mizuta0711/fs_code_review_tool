@@ -1,19 +1,31 @@
-import type { AIProvider, LanguageModelClient } from "./types";
+import type { AIProvider, LanguageModelClient, AIClientConfig } from "./types";
 import { GeminiClient } from "./gemini";
 import { AzureOpenAIClient } from "./azure-openai";
+import { ClaudeClient } from "./claude";
 
-export function createAIClient(provider: AIProvider): LanguageModelClient {
+/**
+ * AIクライアントを作成
+ * @param provider プロバイダー種別
+ * @param config オプションの設定（APIキー等）
+ * @returns AIクライアント
+ */
+export function createAIClient(
+  provider: AIProvider,
+  config?: AIClientConfig
+): LanguageModelClient {
   switch (provider) {
     case "gemini":
-      return new GeminiClient();
+      return new GeminiClient(config);
     case "azure-openai":
-      return new AzureOpenAIClient();
+      return new AzureOpenAIClient(config);
+    case "claude":
+      return new ClaudeClient(config);
     default:
       throw new Error(`Unknown AI provider: ${provider}`);
   }
 }
 
-// 利用可能なプロバイダーをチェック
+// 利用可能なプロバイダーをチェック（環境変数ベース）
 export function getAvailableProviders(): {
   provider: AIProvider;
   available: boolean;
@@ -38,6 +50,11 @@ export function getAvailableProviders(): {
         process.env.AZURE_OPENAI_DEPLOYMENT
           ? undefined
           : "Azure OpenAI configuration is incomplete",
+    },
+    {
+      provider: "claude",
+      available: !!process.env.ANTHROPIC_API_KEY,
+      reason: process.env.ANTHROPIC_API_KEY ? undefined : "ANTHROPIC_API_KEY is not set",
     },
   ];
 }

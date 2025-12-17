@@ -31,6 +31,8 @@ export const reviewRequestSchema = z.object({
     .string()
     .optional()
     .transform((val) => (val === "" ? undefined : val)),
+  // パスワード認証用（AIプロバイダー利用時に必要）
+  password: z.string().optional(),
 });
 
 // 型エクスポート

@@ -24,7 +24,7 @@ export const settingsRepository = {
       setting = await prisma.setting.create({
         data: {
           id: DEFAULTS.SETTINGS_ID,
-          aiProvider: DEFAULTS.AI_PROVIDER,
+          activeProviderId: null,
         },
       });
     }
@@ -51,11 +51,11 @@ export const settingsRepository = {
     return prisma.setting.upsert({
       where: { id: DEFAULTS.SETTINGS_ID },
       update: {
-        ...(data.aiProvider && { aiProvider: data.aiProvider }),
+        activeProviderId: data.activeProviderId,
       },
       create: {
         id: DEFAULTS.SETTINGS_ID,
-        aiProvider: data.aiProvider || DEFAULTS.AI_PROVIDER,
+        activeProviderId: data.activeProviderId ?? null,
       },
     });
   },

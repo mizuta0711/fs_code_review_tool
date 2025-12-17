@@ -9,6 +9,7 @@
 export const AI_PROVIDERS = {
   GEMINI: "gemini",
   AZURE_OPENAI: "azure-openai",
+  CLAUDE: "claude",
 } as const;
 
 export const VALID_AI_PROVIDERS = Object.values(AI_PROVIDERS);
@@ -83,6 +84,17 @@ export const ERROR_CODES = {
   REVIEW_TIMEOUT: "REVIEW_TIMEOUT",
   REVIEW_RATE_LIMITED: "REVIEW_RATE_LIMITED",
   REVIEW_FAILED: "REVIEW_FAILED",
+  REVIEW_PASSWORD_REQUIRED: "REVIEW_PASSWORD_REQUIRED",
+  REVIEW_PASSWORD_INVALID: "REVIEW_PASSWORD_INVALID",
+
+  // AIプロバイダー関連
+  AI_PROVIDER_NOT_FOUND: "AI_PROVIDER_NOT_FOUND",
+  AI_PROVIDER_NOT_CONFIGURED: "AI_PROVIDER_NOT_CONFIGURED",
+  AI_PROVIDER_CREATE_FAILED: "AI_PROVIDER_CREATE_FAILED",
+  AI_PROVIDER_UPDATE_FAILED: "AI_PROVIDER_UPDATE_FAILED",
+  AI_PROVIDER_DELETE_FAILED: "AI_PROVIDER_DELETE_FAILED",
+  AI_PROVIDER_ACTIVATE_FAILED: "AI_PROVIDER_ACTIVATE_FAILED",
+  AI_PROVIDER_PASSWORD_INVALID: "AI_PROVIDER_PASSWORD_INVALID",
 } as const;
 
 // =============================================================================
@@ -136,6 +148,24 @@ export const ERROR_MESSAGES = {
     TIMEOUT: "レビューがタイムアウトしました。コードを小分けにして再試行してください",
     RATE_LIMITED: "API利用制限に達しました。しばらく待ってから再試行してください",
     FAILED: "レビューの実行に失敗しました",
+    PASSWORD_REQUIRED: "パスワードが必要です",
+    PASSWORD_INVALID: "パスワードが正しくありません",
+  },
+
+  // AIプロバイダー関連
+  AI_PROVIDER: {
+    NOT_FOUND: "AIプロバイダー設定が見つかりません",
+    NOT_CONFIGURED: "AIプロバイダーが設定されていません",
+    NAME_REQUIRED: "表示名は必須です",
+    API_KEY_REQUIRED: "APIキーは必須です",
+    PASSWORD_REQUIRED: "パスワードは必須です",
+    PASSWORD_INVALID: "パスワードが正しくありません",
+    FETCH_FAILED: "AIプロバイダー設定の取得に失敗しました",
+    CREATE_FAILED: "AIプロバイダー設定の作成に失敗しました",
+    UPDATE_FAILED: "AIプロバイダー設定の更新に失敗しました",
+    DELETE_FAILED: "AIプロバイダー設定の削除に失敗しました",
+    ACTIVATE_FAILED: "AIプロバイダーのアクティブ化に失敗しました",
+    CANNOT_DELETE_ACTIVE: "使用中のプロバイダーは削除できません",
   },
 } as const;
 

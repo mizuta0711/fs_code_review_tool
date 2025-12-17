@@ -24,6 +24,7 @@ import {
   StarOff,
   FileText,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { promptsApi, type Prompt, ApiError } from "@/lib/api-client";
@@ -39,6 +40,11 @@ export default function PromptsPage() {
     description: "",
     content: "",
   });
+
+  // 削除確認ダイアログ
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deletingPrompt, setDeletingPrompt] = useState<Prompt | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // プロンプト一覧を取得
   useEffect(() => {
@@ -108,23 +114,34 @@ export default function PromptsPage() {
     }
   };
 
-  // 削除
-  const handleDelete = async (id: string) => {
-    const prompt = prompts.find((p) => p.id === id);
-    if (prompt?.isDefault) {
+  // 削除確認ダイアログを開く
+  const openDeleteDialog = (prompt: Prompt) => {
+    if (prompt.isDefault) {
       toast.error("デフォルトプロンプトは削除できません");
       return;
     }
+    setDeletingPrompt(prompt);
+    setIsDeleteDialogOpen(true);
+  };
 
+  // 削除実行
+  const handleDelete = async () => {
+    if (!deletingPrompt) return;
+
+    setIsDeleting(true);
     try {
-      await promptsApi.delete(id);
-      setPrompts(prompts.filter((p) => p.id !== id));
+      await promptsApi.delete(deletingPrompt.id);
+      setPrompts(prompts.filter((p) => p.id !== deletingPrompt.id));
       toast.success("プロンプトを削除しました");
+      setIsDeleteDialogOpen(false);
+      setDeletingPrompt(null);
     } catch (error) {
       console.error("Failed to delete prompt:", error);
       toast.error(
         error instanceof ApiError ? error.message : "削除に失敗しました"
       );
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -298,7 +315,7 @@ export default function PromptsPage() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => handleDelete(prompt.id)}
+                    onClick={() => openDeleteDialog(prompt)}
                     className="text-destructive hover:text-destructive"
                     disabled={prompt.isDefault}
                   >
@@ -325,6 +342,37 @@ export default function PromptsPage() {
           </Button>
         </Card>
       )}
+
+      {/* 削除確認ダイアログ */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              プロンプトの削除
+            </DialogTitle>
+            <DialogDescription>
+              「{deletingPrompt?.name}」を削除しますか？この操作は取り消せません。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+            >
+              キャンセル
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              削除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

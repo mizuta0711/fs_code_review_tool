@@ -1,4 +1,7 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+/**
+ * Claude (Anthropic) AIクライアント
+ */
+import Anthropic from "@anthropic-ai/sdk";
 import type {
   LanguageModelClient,
   ReviewRequest,
@@ -6,29 +9,42 @@ import type {
   AIClientConfig,
 } from "./types";
 
-export class GeminiClient implements LanguageModelClient {
-  private client: GoogleGenerativeAI;
+export class ClaudeClient implements LanguageModelClient {
+  private client: Anthropic;
   private model: string;
 
   constructor(config?: AIClientConfig) {
-    const apiKey = config?.apiKey || process.env.GEMINI_API_KEY;
+    const apiKey = config?.apiKey || process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      throw new Error("Gemini API key is not configured");
+      throw new Error("Anthropic API key is not configured");
     }
-    this.client = new GoogleGenerativeAI(apiKey);
-    this.model = config?.model || process.env.GEMINI_MODEL || "gemini-1.5-flash";
+    this.client = new Anthropic({ apiKey });
+    this.model = config?.model || process.env.CLAUDE_MODEL || "claude-sonnet-4-20250514";
   }
 
   async review(request: ReviewRequest): Promise<ReviewResponse> {
-    const model = this.client.getGenerativeModel({ model: this.model });
-
     const reviewedFiles = await Promise.all(
       request.files.map(async (file) => {
-        const prompt = this.buildPrompt(request.prompt, file.name, file.language, file.content);
+        const prompt = this.buildPrompt(
+          request.prompt,
+          file.name,
+          file.language,
+          file.content
+        );
 
-        const result = await model.generateContent(prompt);
-        const response = result.response;
-        const reviewedContent = response.text();
+        const message = await this.client.messages.create({
+          model: this.model,
+          max_tokens: 8192,
+          messages: [
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+        });
+
+        const content = message.content[0];
+        const reviewedContent = content.type === "text" ? content.text : "";
 
         return {
           name: file.name,

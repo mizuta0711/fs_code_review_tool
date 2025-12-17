@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -11,6 +12,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -25,10 +34,20 @@ import {
   ArrowLeft,
   Code2,
   FileCheck,
+  Key,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { promptsApi, reviewApi, type Prompt } from "@/lib/api-client";
+import {
+  promptsApi,
+  reviewApi,
+  aiProviderApi,
+  settingsApi,
+  type Prompt,
+  type AIProviderListItem,
+  ApiError,
+} from "@/lib/api-client";
 
 // Monaco Editorを動的インポート（SSR無効）
 const Editor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
@@ -71,6 +90,30 @@ interface CodeFile {
 
 type ViewMode = "input" | "result";
 
+// パスワードのローカルストレージキー
+const PASSWORD_STORAGE_KEY = "ai_provider_password";
+
+// パスワードをローカルストレージに保存
+const savePassword = (providerId: string, password: string) => {
+  try {
+    const stored = JSON.parse(localStorage.getItem(PASSWORD_STORAGE_KEY) || "{}");
+    stored[providerId] = password;
+    localStorage.setItem(PASSWORD_STORAGE_KEY, JSON.stringify(stored));
+  } catch {
+    // 失敗しても続行
+  }
+};
+
+// パスワードをローカルストレージから取得
+const getStoredPassword = (providerId: string): string => {
+  try {
+    const stored = JSON.parse(localStorage.getItem(PASSWORD_STORAGE_KEY) || "{}");
+    return stored[providerId] || "";
+  } catch {
+    return "";
+  }
+};
+
 export default function Home() {
   const [viewMode, setViewMode] = useState<ViewMode>("input");
   const [files, setFiles] = useState<CodeFile[]>([
@@ -83,6 +126,17 @@ export default function Home() {
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [isLoadingPrompts, setIsLoadingPrompts] = useState(true);
   const dropZoneRef = useRef<HTMLDivElement>(null);
+
+  // パスワードダイアログ関連
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [activeProvider, setActiveProvider] = useState<AIProviderListItem | null>(null);
+  const [isLoadingProvider, setIsLoadingProvider] = useState(true);
+  const [passwordError, setPasswordError] = useState("");
+
+  // ファイル名編集関連
+  const [editingFileId, setEditingFileId] = useState<string | null>(null);
+  const [editingFileName, setEditingFileName] = useState("");
 
   const activeFile = files.find((f) => f.id === activeFileId);
   const hasReviewResults = files.some((f) => f.reviewedContent !== null);
@@ -108,6 +162,21 @@ export default function Home() {
       }
     };
     fetchPrompts();
+  }, []);
+
+  // アクティブなプロバイダーを取得
+  useEffect(() => {
+    const fetchActiveProvider = async () => {
+      try {
+        const settings = await settingsApi.get();
+        setActiveProvider(settings.activeProvider);
+      } catch (error) {
+        console.error("Failed to fetch active provider:", error);
+      } finally {
+        setIsLoadingProvider(false);
+      }
+    };
+    fetchActiveProvider();
   }, []);
 
   // ファイル追加
@@ -144,6 +213,27 @@ export default function Home() {
         f.id === id ? { ...f, name, language: getLanguageFromFileName(name) } : f
       )
     );
+  };
+
+  // ファイル名編集開始（ダブルクリック）
+  const startEditingFileName = (fileId: string, currentName: string) => {
+    setEditingFileId(fileId);
+    setEditingFileName(currentName);
+  };
+
+  // ファイル名編集確定
+  const finishEditingFileName = () => {
+    if (editingFileId && editingFileName.trim()) {
+      updateFileName(editingFileId, editingFileName.trim());
+    }
+    setEditingFileId(null);
+    setEditingFileName("");
+  };
+
+  // ファイル名編集キャンセル（Escapeキー）
+  const cancelEditingFileName = () => {
+    setEditingFileId(null);
+    setEditingFileName("");
   };
 
   // コード変更
@@ -232,8 +322,8 @@ export default function Home() {
     [files]
   );
 
-  // レビュー実行
-  const executeReview = async () => {
+  // レビュー実行ボタンクリック
+  const handleReviewClick = () => {
     if (!selectedPrompt) {
       toast.error("プロンプトを選択してください");
       return;
@@ -242,18 +332,43 @@ export default function Home() {
       toast.error("レビュー対象のコードを入力してください");
       return;
     }
+    if (!activeProvider) {
+      toast.error("AIプロバイダーが設定されていません。設定画面から登録してください。");
+      return;
+    }
 
+    // 保存済みパスワードがあれば自動入力
+    const storedPassword = getStoredPassword(activeProvider.id);
+    setPassword(storedPassword);
+    setPasswordError("");
+    setIsPasswordDialogOpen(true);
+  };
+
+  // レビュー実行
+  const executeReview = async () => {
+    if (!password) {
+      setPasswordError("パスワードを入力してください");
+      return;
+    }
+
+    setIsPasswordDialogOpen(false);
     setIsReviewing(true);
 
     try {
-      const result = await reviewApi.execute(
-        filesWithContent.map((f) => ({
+      const result = await reviewApi.execute({
+        files: filesWithContent.map((f) => ({
           name: f.name,
           language: f.language,
           content: f.content,
         })),
-        selectedPrompt
-      );
+        promptId: selectedPrompt,
+        password,
+      });
+
+      // パスワードを保存
+      if (activeProvider) {
+        savePassword(activeProvider.id, password);
+      }
 
       // レビュー結果をファイルに反映
       setFiles(
@@ -271,9 +386,15 @@ export default function Home() {
       toast.success(`${filesWithContent.length}ファイルのレビュー完了`);
     } catch (error) {
       console.error("Review failed:", error);
-      toast.error(
-        error instanceof Error ? error.message : "レビューの実行に失敗しました"
-      );
+      if (error instanceof ApiError && error.code === "REVIEW_PASSWORD_INVALID") {
+        // パスワード不正の場合は再度ダイアログを開く
+        setPasswordError("パスワードが正しくありません");
+        setIsPasswordDialogOpen(true);
+      } else {
+        toast.error(
+          error instanceof Error ? error.message : "レビューの実行に失敗しました"
+        );
+      }
     } finally {
       setIsReviewing(false);
     }
@@ -345,6 +466,11 @@ export default function Home() {
 
         {viewMode === "input" && (
           <div className="flex items-center gap-3">
+            {activeProvider && (
+              <Badge variant="outline" className="text-xs">
+                {activeProvider.name}
+              </Badge>
+            )}
             <Select value={selectedPrompt} onValueChange={setSelectedPrompt}>
               <SelectTrigger className="w-[240px]">
                 <SelectValue placeholder={isLoadingPrompts ? "読み込み中..." : "プロンプトを選択"} />
@@ -359,8 +485,14 @@ export default function Home() {
               </SelectContent>
             </Select>
             <Button
-              onClick={executeReview}
-              disabled={isReviewing || !selectedPrompt || filesWithContent.length === 0}
+              onClick={handleReviewClick}
+              disabled={
+                isReviewing ||
+                !selectedPrompt ||
+                filesWithContent.length === 0 ||
+                isLoadingProvider ||
+                !activeProvider
+              }
             >
               {isReviewing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -403,6 +535,20 @@ export default function Home() {
         )}
       </div>
 
+      {/* AIプロバイダー未設定の警告 */}
+      {!isLoadingProvider && !activeProvider && viewMode === "input" && (
+        <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-center gap-2 text-sm">
+          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <span>
+            AIプロバイダーが設定されていません。
+            <a href="/settings" className="underline ml-1 font-medium">
+              設定画面
+            </a>
+            から登録してください。
+          </span>
+        </div>
+      )}
+
       {/* ファイルタブ */}
       <div className="flex items-center gap-1 border-b bg-muted/30 px-2 rounded-t-lg">
         {(viewMode === "input" ? files : reviewedFiles).map((file) => (
@@ -415,18 +561,35 @@ export default function Home() {
                 : "border-transparent hover:bg-muted/50"
             )}
             onClick={() => setActiveFileId(file.id)}
+            onDoubleClick={(e) => {
+              if (viewMode === "input") {
+                e.stopPropagation();
+                startEditingFileName(file.id, file.name);
+              }
+            }}
           >
-            {viewMode === "input" ? (
+            {viewMode === "input" && editingFileId === file.id ? (
               <Input
-                value={file.name}
-                onChange={(e) => updateFileName(file.id, e.target.value)}
-                className="h-5 w-24 text-xs border-none bg-transparent p-0 focus-visible:ring-0"
+                value={editingFileName}
+                onChange={(e) => setEditingFileName(e.target.value)}
+                onBlur={finishEditingFileName}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    finishEditingFileName();
+                  } else if (e.key === "Escape") {
+                    cancelEditingFileName();
+                  }
+                }}
+                className="h-5 w-28 text-xs border border-primary bg-background px-1 focus-visible:ring-1"
                 onClick={(e) => e.stopPropagation()}
+                autoFocus
               />
             ) : (
-              <span className="text-sm">{file.name}</span>
+              <span className="text-sm truncate max-w-[120px]" title={file.name}>
+                {file.name}
+              </span>
             )}
-            {viewMode === "input" && files.length > 1 && (
+            {viewMode === "input" && files.length > 1 && editingFileId !== file.id && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -531,6 +694,59 @@ export default function Home() {
           />
         )}
       </div>
+
+      {/* パスワード入力ダイアログ */}
+      <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="h-5 w-5" />
+              パスワードを入力
+            </DialogTitle>
+            <DialogDescription>
+              {activeProvider?.name} を使用するためのパスワードを入力してください。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="space-y-2">
+              <Label htmlFor="review-password">パスワード</Label>
+              <Input
+                id="review-password"
+                type="password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setPasswordError("");
+                }}
+                placeholder="パスワードを入力"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    executeReview();
+                  }
+                }}
+                autoFocus
+              />
+              {passwordError && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" />
+                  {passwordError}
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsPasswordDialogOpen(false)}
+            >
+              キャンセル
+            </Button>
+            <Button onClick={executeReview} disabled={!password}>
+              レビュー開始
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

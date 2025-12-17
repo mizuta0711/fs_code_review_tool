@@ -6,8 +6,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 /// プロンプトテンプレート
@@ -23,9 +23,27 @@ model Prompt {
   @@index([isDefault])
 }
 
+/// AIプロバイダー設定
+model AIProviderConfig {
+  id          String   @id @default(uuid())
+  name        String               // 表示名（例: "本番用Gemini", "テスト用Claude"）
+  provider    String               // プロバイダー種別: gemini, azure-openai, claude
+  apiKey      String               // 暗号化されたAPIキー
+  endpoint    String?              // Azure OpenAI用エンドポイント
+  deployment  String?              // Azure OpenAI用デプロイメント名
+  model       String?              // モデル名（オプション）
+  password    String               // 利用パスワード（ハッシュ化）
+  isActive    Boolean  @default(false)  // 現在使用中かどうか
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([provider])
+  @@index([isActive])
+}
+
 /// アプリケーション設定
 model Setting {
-  id         String   @id @default("default")
-  aiProvider String   @default("gemini")
-  updatedAt  DateTime @updatedAt
+  id                 String   @id @default("default")
+  activeProviderId   String?  // 現在アクティブなAIProviderConfigのID
+  updatedAt          DateTime @updatedAt
 }
