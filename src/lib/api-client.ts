@@ -88,6 +88,7 @@ export interface AIProviderListItem {
   deployment: string | null;
   model: string | null;
   isActive: boolean;
+  hasPassword: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -99,7 +100,7 @@ export interface CreateAIProviderInput {
   endpoint?: string;
   deployment?: string;
   model?: string;
-  password: string;
+  password?: string;
 }
 
 export interface UpdateAIProviderInput {
@@ -226,7 +227,8 @@ export interface ReviewResult {
 export interface ReviewRequest {
   files: CodeFile[];
   promptId?: string;
-  password: string;
+  providerId?: string;
+  password?: string;
 }
 
 export const reviewApi = {

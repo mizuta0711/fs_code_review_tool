@@ -42,26 +42,30 @@ export const reviewService = {
     logger.serviceStart(SERVICE_NAME, "execute", {
       fileCount: input.files.length,
       promptId: input.promptId,
+      providerId: input.providerId,
     });
 
-    // 1. アクティブなAIプロバイダーの取得
-    const providerConfig = await aiProviderService.getActiveFullConfig();
-    if (!providerConfig) {
-      throw new NotFoundError(
-        ERROR_MESSAGES.AI_PROVIDER.NOT_CONFIGURED,
-        ERROR_CODES.AI_PROVIDER_NOT_CONFIGURED
-      );
+    // 1. AIプロバイダーの取得（指定があればそれを使用、なければアクティブなものを使用）
+    let providerConfig;
+    if (input.providerId) {
+      providerConfig = await aiProviderService.getFullConfig(input.providerId);
+      if (!providerConfig) {
+        throw new NotFoundError(
+          ERROR_MESSAGES.AI_PROVIDER.NOT_FOUND,
+          ERROR_CODES.AI_PROVIDER_NOT_FOUND
+        );
+      }
+    } else {
+      providerConfig = await aiProviderService.getActiveFullConfig();
+      if (!providerConfig) {
+        throw new NotFoundError(
+          ERROR_MESSAGES.AI_PROVIDER.NOT_CONFIGURED,
+          ERROR_CODES.AI_PROVIDER_NOT_CONFIGURED
+        );
+      }
     }
 
-    // 2. パスワード検証
-    if (!input.password) {
-      throw new AppError(
-        ERROR_MESSAGES.REVIEW.PASSWORD_REQUIRED,
-        HTTP_STATUS.BAD_REQUEST,
-        ERROR_CODES.REVIEW_PASSWORD_REQUIRED
-      );
-    }
-
+    // 2. パスワード検証（パスワードが設定されている場合のみ）
     const isPasswordValid = await aiProviderService.verifyPassword(
       providerConfig.id,
       input.password
@@ -207,7 +211,7 @@ async function executeReview(
       );
     }
 
-    // レート制限エラー
+    // レート制限・クレジット不足エラー
     if (
       error instanceof Error &&
       (error.message.includes("rate") || error.message.includes("quota"))
@@ -217,6 +221,19 @@ async function executeReview(
         ERROR_MESSAGES.REVIEW.RATE_LIMITED,
         HTTP_STATUS.TOO_MANY_REQUESTS,
         ERROR_CODES.REVIEW_RATE_LIMITED
+      );
+    }
+
+    // クレジット残高不足エラー
+    if (
+      error instanceof Error &&
+      (error.message.includes("credit balance") || error.message.includes("billing"))
+    ) {
+      logger.warn("Review credit insufficient", { fileCount: files.length });
+      throw new AppError(
+        "APIのクレジット残高が不足しています。プロバイダーの課金設定を確認してください。",
+        HTTP_STATUS.PAYMENT_REQUIRED,
+        "CREDIT_INSUFFICIENT"
       );
     }
 

@@ -25,6 +25,7 @@ function toListItem(config: AIProviderConfig): AIProviderListItem {
     deployment: config.deployment,
     model: config.model,
     isActive: config.isActive,
+    hasPassword: !!config.password,
     createdAt: config.createdAt,
     updatedAt: config.updatedAt,
   };
@@ -209,16 +210,35 @@ export const aiProviderService = {
 
   /**
    * パスワードを検証
+   * パスワードが設定されていないプロバイダーは常にtrue
    * @param id プロバイダーID
    * @param password パスワード
    * @returns 検証結果
    */
-  verifyPassword: async (id: string, password: string): Promise<boolean> => {
+  verifyPassword: async (id: string, password?: string): Promise<boolean> => {
     const config = await aiProviderRepository.findById(id);
     if (!config) {
       return false;
     }
+    // パスワードが設定されていない場合は常に許可
+    if (!config.password) {
+      return true;
+    }
+    // パスワードが設定されているがリクエストにパスワードがない
+    if (!password) {
+      return false;
+    }
     return verifyPassword(password, config.password);
+  },
+
+  /**
+   * プロバイダーにパスワードが設定されているか確認
+   * @param id プロバイダーID
+   * @returns パスワードが設定されている場合true
+   */
+  hasPassword: async (id: string): Promise<boolean> => {
+    const config = await aiProviderRepository.findById(id);
+    return !!(config?.password);
   },
 
   /**

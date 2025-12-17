@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -34,7 +35,6 @@ import {
   CheckCircle2,
   Pencil,
   Trash2,
-  Power,
   AlertTriangle,
 } from "lucide-react";
 import {
@@ -89,6 +89,7 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isActivating, setIsActivating] = useState<string | null>(null);
+  const [clearPassword, setClearPassword] = useState(false);
 
   // プロバイダー一覧取得
   const fetchProviders = async () => {
@@ -111,6 +112,7 @@ export default function SettingsPage() {
   const handleOpenNewDialog = () => {
     setEditingProvider(null);
     setFormData(INITIAL_FORM_DATA);
+    setClearPassword(false);
     setIsFormDialogOpen(true);
   };
 
@@ -126,6 +128,7 @@ export default function SettingsPage() {
       model: provider.model || "",
       password: "", // パスワードは表示しない
     });
+    setClearPassword(false);
     setIsFormDialogOpen(true);
   };
 
@@ -148,7 +151,8 @@ export default function SettingsPage() {
         toast.error("APIキーを入力してください");
         return;
       }
-      if (!formData.password || formData.password.length < 4) {
+      // パスワードは任意だが、設定する場合は4文字以上
+      if (formData.password && formData.password.length < 4) {
         toast.error("パスワードは4文字以上で入力してください");
         return;
       }
@@ -180,7 +184,10 @@ export default function SettingsPage() {
         if (formData.apiKey) {
           updateData.apiKey = formData.apiKey;
         }
-        if (formData.password) {
+        // パスワード削除の場合は空文字列を送信、新しいパスワードがあればそれを送信
+        if (clearPassword) {
+          updateData.password = "";
+        } else if (formData.password) {
           updateData.password = formData.password;
         }
         await aiProviderApi.update(editingProvider.id, updateData);
@@ -237,12 +244,12 @@ export default function SettingsPage() {
     setIsActivating(id);
     try {
       await aiProviderApi.activate(id);
-      toast.success("AIプロバイダーをアクティブにしました");
+      toast.success("デフォルトプロバイダーを設定しました");
       fetchProviders();
     } catch (error) {
       console.error("Failed to activate provider:", error);
       toast.error(
-        error instanceof ApiError ? error.message : "アクティブ化に失敗しました"
+        error instanceof ApiError ? error.message : "デフォルト設定に失敗しました"
       );
     } finally {
       setIsActivating(null);
@@ -275,14 +282,17 @@ export default function SettingsPage() {
         </Button>
       </div>
 
-      {/* 現在のアクティブプロバイダー */}
+      {/* デフォルトプロバイダー */}
       {activeProvider && (
         <Card className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-green-600" />
-              現在使用中のプロバイダー
+              デフォルトプロバイダー
             </CardTitle>
+            <CardDescription className="text-xs">
+              レビュー画面で初期選択されるプロバイダーです
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-3">
@@ -317,7 +327,7 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle>登録済みプロバイダー</CardTitle>
             <CardDescription>
-              使用したいプロバイダーの「使用」ボタンをクリックしてアクティブにしてください
+              「デフォルトに設定」でデフォルトプロバイダーを選択できます。レビュー時に個別選択も可能です。
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -341,6 +351,11 @@ export default function SettingsPage() {
                         <Badge variant="secondary">
                           {PROVIDER_LABELS[provider.provider]}
                         </Badge>
+                        {!provider.hasPassword && (
+                          <Badge variant="outline" className="text-xs">
+                            パスワード無し
+                          </Badge>
+                        )}
                       </div>
                       <div className="text-sm text-muted-foreground">
                         {provider.model && <span>モデル: {provider.model}</span>}
@@ -363,9 +378,9 @@ export default function SettingsPage() {
                         {isActivating === provider.id ? (
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         ) : (
-                          <Power className="mr-2 h-4 w-4" />
+                          <CheckCircle2 className="mr-2 h-4 w-4" />
                         )}
-                        使用
+                        デフォルトに設定
                       </Button>
                     )}
                     <Button
@@ -382,7 +397,7 @@ export default function SettingsPage() {
                       disabled={provider.isActive}
                       title={
                         provider.isActive
-                          ? "使用中のプロバイダーは削除できません"
+                          ? "デフォルトプロバイダーは削除できません"
                           : "削除"
                       }
                     >
@@ -508,7 +523,7 @@ export default function SettingsPage() {
                   formData.provider === "gemini"
                     ? "gemini-1.5-flash"
                     : formData.provider === "claude"
-                    ? "claude-sonnet-4-20250514"
+                    ? "claude-3-5-sonnet-20241022"
                     : ""
                 }
               />
@@ -518,8 +533,28 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">
-                利用パスワード {editingProvider ? "(変更する場合のみ)" : "*"}
+                利用パスワード (任意)
               </Label>
+              {editingProvider?.hasPassword && (
+                <div className="flex items-center space-x-2 py-1">
+                  <Checkbox
+                    id="clearPassword"
+                    checked={clearPassword}
+                    onCheckedChange={(checked) => {
+                      setClearPassword(checked === true);
+                      if (checked) {
+                        setFormData((prev) => ({ ...prev, password: "" }));
+                      }
+                    }}
+                  />
+                  <label
+                    htmlFor="clearPassword"
+                    className="text-sm text-muted-foreground cursor-pointer"
+                  >
+                    パスワードを削除する
+                  </label>
+                </div>
+              )}
               <Input
                 id="password"
                 type="password"
@@ -529,12 +564,15 @@ export default function SettingsPage() {
                 }
                 placeholder={
                   editingProvider
-                    ? "変更しない場合は空欄"
-                    : "4文字以上のパスワード"
+                    ? clearPassword
+                      ? "パスワードは削除されます"
+                      : "変更しない場合は空欄"
+                    : "4文字以上（空欄可）"
                 }
+                disabled={clearPassword}
               />
               <p className="text-xs text-muted-foreground">
-                レビュー実行時に入力が必要です
+                設定するとレビュー時に入力が必要になります
               </p>
             </div>
           </div>

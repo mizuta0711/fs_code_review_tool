@@ -32,7 +32,7 @@ model AIProviderConfig {
   endpoint    String?              // Azure OpenAI用エンドポイント
   deployment  String?              // Azure OpenAI用デプロイメント名
   model       String?              // モデル名（オプション）
-  password    String               // 利用パスワード（ハッシュ化）
+  password    String?              // 利用パスワード（ハッシュ化、任意）
   isActive    Boolean  @default(false)  // 現在使用中かどうか
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

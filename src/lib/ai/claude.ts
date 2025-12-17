@@ -19,7 +19,8 @@ export class ClaudeClient implements LanguageModelClient {
       throw new Error("Anthropic API key is not configured");
     }
     this.client = new Anthropic({ apiKey });
-    this.model = config?.model || process.env.CLAUDE_MODEL || "claude-sonnet-4-20250514";
+    this.model = config?.model || process.env.CLAUDE_MODEL || "claude-3-5-sonnet-20241022";
+    console.log(`[ClaudeClient] Initialized with model: ${this.model}`);
   }
 
   async review(request: ReviewRequest): Promise<ReviewResponse> {
@@ -32,25 +33,31 @@ export class ClaudeClient implements LanguageModelClient {
           file.content
         );
 
-        const message = await this.client.messages.create({
-          model: this.model,
-          max_tokens: 8192,
-          messages: [
-            {
-              role: "user",
-              content: prompt,
-            },
-          ],
-        });
+        try {
+          console.log(`[ClaudeClient] Sending request for file: ${file.name}, model: ${this.model}`);
+          const message = await this.client.messages.create({
+            model: this.model,
+            max_tokens: 8192,
+            messages: [
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+          });
 
-        const content = message.content[0];
-        const reviewedContent = content.type === "text" ? content.text : "";
+          const content = message.content[0];
+          const reviewedContent = content.type === "text" ? content.text : "";
 
-        return {
-          name: file.name,
-          language: file.language,
-          content: this.extractCode(reviewedContent),
-        };
+          return {
+            name: file.name,
+            language: file.language,
+            content: this.extractCode(reviewedContent),
+          };
+        } catch (error) {
+          console.error(`[ClaudeClient] Error reviewing ${file.name}:`, error);
+          throw error;
+        }
       })
     );
 

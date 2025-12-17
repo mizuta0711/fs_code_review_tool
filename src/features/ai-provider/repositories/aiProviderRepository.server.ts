@@ -56,7 +56,7 @@ export const aiProviderRepository = {
         endpoint: data.endpoint || null,
         deployment: data.deployment || null,
         model: data.model || null,
-        password: hashPassword(data.password),
+        password: data.password ? hashPassword(data.password) : null,
         isActive: false,
       },
     });
@@ -77,7 +77,9 @@ export const aiProviderRepository = {
     if (data.endpoint !== undefined) updateData.endpoint = data.endpoint || null;
     if (data.deployment !== undefined) updateData.deployment = data.deployment || null;
     if (data.model !== undefined) updateData.model = data.model || null;
-    if (data.password !== undefined) updateData.password = hashPassword(data.password);
+    if (data.password !== undefined) {
+      updateData.password = data.password ? hashPassword(data.password) : null;
+    }
 
     return prisma.aIProviderConfig.update({
       where: { id },

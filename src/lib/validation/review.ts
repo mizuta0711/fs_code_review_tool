@@ -31,7 +31,12 @@ export const reviewRequestSchema = z.object({
     .string()
     .optional()
     .transform((val) => (val === "" ? undefined : val)),
-  // パスワード認証用（AIプロバイダー利用時に必要）
+  // AIプロバイダーID（指定がない場合はアクティブなプロバイダーを使用）
+  providerId: z
+    .string()
+    .optional()
+    .transform((val) => (val === "" ? undefined : val)),
+  // パスワード認証用（AIプロバイダーにパスワードが設定されている場合のみ必要）
   password: z.string().optional(),
 });
 

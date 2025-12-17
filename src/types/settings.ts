@@ -46,7 +46,7 @@ export interface CreateAIProviderInput {
   endpoint?: string;
   deployment?: string;
   model?: string;
-  password: string;
+  password?: string;
 }
 
 /**
@@ -73,6 +73,7 @@ export interface AIProviderListItem {
   deployment?: string | null;
   model?: string | null;
   isActive: boolean;
+  hasPassword: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

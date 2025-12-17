@@ -130,9 +130,12 @@ export default function Home() {
   // パスワードダイアログ関連
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [password, setPassword] = useState("");
-  const [activeProvider, setActiveProvider] = useState<AIProviderListItem | null>(null);
-  const [isLoadingProvider, setIsLoadingProvider] = useState(true);
   const [passwordError, setPasswordError] = useState("");
+
+  // AIプロバイダー関連
+  const [providers, setProviders] = useState<AIProviderListItem[]>([]);
+  const [selectedProviderId, setSelectedProviderId] = useState<string>("");
+  const [isLoadingProviders, setIsLoadingProviders] = useState(true);
 
   // ファイル名編集関連
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
@@ -164,20 +167,32 @@ export default function Home() {
     fetchPrompts();
   }, []);
 
-  // アクティブなプロバイダーを取得
+  // プロバイダー一覧を取得
   useEffect(() => {
-    const fetchActiveProvider = async () => {
+    const fetchProviders = async () => {
       try {
-        const settings = await settingsApi.get();
-        setActiveProvider(settings.activeProvider);
+        const [providerList, settings] = await Promise.all([
+          aiProviderApi.list(),
+          settingsApi.get(),
+        ]);
+        setProviders(providerList);
+        // アクティブなプロバイダーがあれば選択、なければ最初のプロバイダーを選択
+        if (settings.activeProviderId) {
+          setSelectedProviderId(settings.activeProviderId);
+        } else if (providerList.length > 0) {
+          setSelectedProviderId(providerList[0].id);
+        }
       } catch (error) {
-        console.error("Failed to fetch active provider:", error);
+        console.error("Failed to fetch providers:", error);
       } finally {
-        setIsLoadingProvider(false);
+        setIsLoadingProviders(false);
       }
     };
-    fetchActiveProvider();
+    fetchProviders();
   }, []);
+
+  // 選択中のプロバイダー
+  const selectedProvider = providers.find((p) => p.id === selectedProviderId);
 
   // ファイル追加
   const addFile = () => {
@@ -332,13 +347,19 @@ export default function Home() {
       toast.error("レビュー対象のコードを入力してください");
       return;
     }
-    if (!activeProvider) {
-      toast.error("AIプロバイダーが設定されていません。設定画面から登録してください。");
+    if (!selectedProvider) {
+      toast.error("AIプロバイダーを選択してください。");
+      return;
+    }
+
+    // パスワードが設定されていない場合は直接実行
+    if (!selectedProvider.hasPassword) {
+      executeReview();
       return;
     }
 
     // 保存済みパスワードがあれば自動入力
-    const storedPassword = getStoredPassword(activeProvider.id);
+    const storedPassword = getStoredPassword(selectedProvider.id);
     setPassword(storedPassword);
     setPasswordError("");
     setIsPasswordDialogOpen(true);
@@ -346,7 +367,8 @@ export default function Home() {
 
   // レビュー実行
   const executeReview = async () => {
-    if (!password) {
+    // パスワードが必要な場合のチェック
+    if (selectedProvider?.hasPassword && !password) {
       setPasswordError("パスワードを入力してください");
       return;
     }
@@ -362,12 +384,13 @@ export default function Home() {
           content: f.content,
         })),
         promptId: selectedPrompt,
-        password,
+        providerId: selectedProviderId,
+        password: selectedProvider?.hasPassword ? password : undefined,
       });
 
       // パスワードを保存
-      if (activeProvider) {
-        savePassword(activeProvider.id, password);
+      if (selectedProvider?.hasPassword && password) {
+        savePassword(selectedProvider.id, password);
       }
 
       // レビュー結果をファイルに反映
@@ -466,13 +489,22 @@ export default function Home() {
 
         {viewMode === "input" && (
           <div className="flex items-center gap-3">
-            {activeProvider && (
-              <Badge variant="outline" className="text-xs">
-                {activeProvider.name}
-              </Badge>
-            )}
+            <Select value={selectedProviderId} onValueChange={setSelectedProviderId}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder={isLoadingProviders ? "読み込み中..." : "プロバイダー"} />
+              </SelectTrigger>
+              <SelectContent>
+                {providers.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                    {p.isActive && " (デフォルト)"}
+                    {!p.hasPassword && " [PW無し]"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select value={selectedPrompt} onValueChange={setSelectedPrompt}>
-              <SelectTrigger className="w-[240px]">
+              <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder={isLoadingPrompts ? "読み込み中..." : "プロンプトを選択"} />
               </SelectTrigger>
               <SelectContent>
@@ -490,8 +522,8 @@ export default function Home() {
                 isReviewing ||
                 !selectedPrompt ||
                 filesWithContent.length === 0 ||
-                isLoadingProvider ||
-                !activeProvider
+                isLoadingProviders ||
+                !selectedProviderId
               }
             >
               {isReviewing ? (
@@ -536,7 +568,7 @@ export default function Home() {
       </div>
 
       {/* AIプロバイダー未設定の警告 */}
-      {!isLoadingProvider && !activeProvider && viewMode === "input" && (
+      {!isLoadingProviders && providers.length === 0 && viewMode === "input" && (
         <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-center gap-2 text-sm">
           <AlertCircle className="h-4 w-4 text-yellow-600" />
           <span>
@@ -704,7 +736,7 @@ export default function Home() {
               パスワードを入力
             </DialogTitle>
             <DialogDescription>
-              {activeProvider?.name} を使用するためのパスワードを入力してください。
+              {selectedProvider?.name} を使用するためのパスワードを入力してください。
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">

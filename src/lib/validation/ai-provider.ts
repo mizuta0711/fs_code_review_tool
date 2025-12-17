@@ -33,8 +33,9 @@ export const createAIProviderSchema = z.object({
   model: z.string().optional(),
   password: z
     .string()
-    .min(1, ERROR_MESSAGES.AI_PROVIDER.PASSWORD_REQUIRED)
-    .min(4, "パスワードは4文字以上で入力してください"),
+    .min(4, "パスワードは4文字以上で入力してください")
+    .optional()
+    .or(z.literal("")),
 });
 
 /**
@@ -54,10 +55,12 @@ export const updateAIProviderSchema = z.object({
   endpoint: z.string().url().nullable().optional().or(z.literal("")),
   deployment: z.string().nullable().optional(),
   model: z.string().nullable().optional(),
+  // パスワードは4文字以上、または空文字列（削除用）
   password: z
     .string()
     .min(4, "パスワードは4文字以上で入力してください")
-    .optional(),
+    .optional()
+    .or(z.literal("")),
 });
 
 // 型エクスポート
