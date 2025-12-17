@@ -1,0 +1,31 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+/// プロンプトテンプレート
+model Prompt {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  content     String
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isDefault])
+}
+
+/// アプリケーション設定
+model Setting {
+  id         String   @id @default("default")
+  aiProvider String   @default("gemini")
+  updatedAt  DateTime @updatedAt
+}
