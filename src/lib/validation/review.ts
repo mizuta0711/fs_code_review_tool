@@ -3,7 +3,6 @@
  */
 import { z } from "zod";
 import { VALIDATION, ERROR_MESSAGES } from "@/lib/constants";
-import { commonSchemas } from "./common";
 
 /**
  * コードファイルスキーマ
@@ -21,13 +20,22 @@ export const codeFileSchema = z.object({
 });
 
 /**
+ * オプショナルUUID（空文字列も許可）
+ */
+const optionalUuid = z.union([
+  z.literal(""),
+  z.string().uuid("無効なIDです"),
+  z.undefined(),
+]).transform((val) => (val === "" ? undefined : val));
+
+/**
  * レビューリクエストスキーマ
  */
 export const reviewRequestSchema = z.object({
   files: z
     .array(codeFileSchema)
     .min(1, ERROR_MESSAGES.REVIEW.FILES_REQUIRED),
-  promptId: commonSchemas.uuid.optional(),
+  promptId: optionalUuid,
 });
 
 // 型エクスポート
