@@ -11,7 +11,7 @@ export function Header() {
   const navItems = [
     { href: "/", label: "レビュー", icon: Code2 },
     { href: "/prompts", label: "プロンプト管理", icon: FileText },
-    { href: "/settings", label: "設定", icon: Settings },
+    { href: "/settings", label: "AIプロバイダー設定", icon: Settings },
   ];
 
   return (
