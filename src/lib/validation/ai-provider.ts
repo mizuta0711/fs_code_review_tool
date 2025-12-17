@@ -61,6 +61,8 @@ export const updateAIProviderSchema = z.object({
     .min(4, "パスワードは4文字以上で入力してください")
     .optional()
     .or(z.literal("")),
+  // 現在のパスワード（パスワード付きプロバイダーの編集時に必要）
+  currentPassword: z.string().optional(),
 });
 
 // 型エクスポート

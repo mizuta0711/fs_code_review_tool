@@ -36,6 +36,7 @@ import {
   Pencil,
   Trash2,
   AlertTriangle,
+  Lock,
 } from "lucide-react";
 import {
   aiProviderApi,
@@ -66,6 +67,7 @@ interface ProviderFormData {
   deployment: string;
   model: string;
   password: string;
+  currentPassword: string;
 }
 
 const INITIAL_FORM_DATA: ProviderFormData = {
@@ -76,13 +78,18 @@ const INITIAL_FORM_DATA: ProviderFormData = {
   deployment: "",
   model: "",
   password: "",
+  currentPassword: "",
 };
+
+// パスワード認証が必要な操作の種類
+type PasswordRequiredAction = "edit" | "delete";
 
 export default function SettingsPage() {
   const [providers, setProviders] = useState<AIProviderListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<AIProviderListItem | null>(null);
   const [deletingProvider, setDeletingProvider] = useState<AIProviderListItem | null>(null);
   const [formData, setFormData] = useState<ProviderFormData>(INITIAL_FORM_DATA);
@@ -90,6 +97,11 @@ export default function SettingsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isActivating, setIsActivating] = useState<string | null>(null);
   const [clearPassword, setClearPassword] = useState(false);
+  // パスワード認証用の状態
+  const [passwordAuthTarget, setPasswordAuthTarget] = useState<AIProviderListItem | null>(null);
+  const [passwordAuthAction, setPasswordAuthAction] = useState<PasswordRequiredAction | null>(null);
+  const [authPassword, setAuthPassword] = useState("");
+  const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
 
   // プロバイダー一覧取得
   const fetchProviders = async () => {
@@ -117,7 +129,7 @@ export default function SettingsPage() {
   };
 
   // フォームダイアログを開く（編集）
-  const handleOpenEditDialog = (provider: AIProviderListItem) => {
+  const handleOpenEditDialog = (provider: AIProviderListItem, verifiedPassword?: string) => {
     setEditingProvider(provider);
     setFormData({
       name: provider.name,
@@ -127,15 +139,76 @@ export default function SettingsPage() {
       deployment: provider.deployment || "",
       model: provider.model || "",
       password: "", // パスワードは表示しない
+      currentPassword: verifiedPassword || "", // 認証済みパスワードをセット
     });
     setClearPassword(false);
     setIsFormDialogOpen(true);
   };
 
+  // 編集ボタンクリック時（パスワード認証チェック）
+  const handleEditClick = (provider: AIProviderListItem) => {
+    if (provider.hasPassword) {
+      // パスワード認証が必要
+      setPasswordAuthTarget(provider);
+      setPasswordAuthAction("edit");
+      setAuthPassword("");
+      setIsPasswordDialogOpen(true);
+    } else {
+      // パスワード不要、直接編集ダイアログを開く
+      handleOpenEditDialog(provider);
+    }
+  };
+
   // 削除ダイアログを開く
-  const handleOpenDeleteDialog = (provider: AIProviderListItem) => {
+  const handleOpenDeleteDialog = (provider: AIProviderListItem, verifiedPassword?: string) => {
     setDeletingProvider(provider);
+    setFormData((prev) => ({ ...prev, currentPassword: verifiedPassword || "" }));
     setIsDeleteDialogOpen(true);
+  };
+
+  // 削除ボタンクリック時（パスワード認証チェック）
+  const handleDeleteClick = (provider: AIProviderListItem) => {
+    if (provider.hasPassword) {
+      // パスワード認証が必要
+      setPasswordAuthTarget(provider);
+      setPasswordAuthAction("delete");
+      setAuthPassword("");
+      setIsPasswordDialogOpen(true);
+    } else {
+      // パスワード不要、直接削除ダイアログを開く
+      handleOpenDeleteDialog(provider);
+    }
+  };
+
+  // パスワード認証処理
+  const handlePasswordAuth = async () => {
+    if (!passwordAuthTarget || !passwordAuthAction) return;
+
+    setIsVerifyingPassword(true);
+    try {
+      const isValid = await aiProviderApi.verifyPassword(passwordAuthTarget.id, authPassword);
+      if (!isValid) {
+        toast.error("パスワードが正しくありません");
+        return;
+      }
+
+      setIsPasswordDialogOpen(false);
+
+      // 認証成功後、該当の操作を実行
+      if (passwordAuthAction === "edit") {
+        handleOpenEditDialog(passwordAuthTarget, authPassword);
+      } else if (passwordAuthAction === "delete") {
+        handleOpenDeleteDialog(passwordAuthTarget, authPassword);
+      }
+    } catch (error) {
+      console.error("Password verification failed:", error);
+      toast.error("パスワードの検証に失敗しました");
+    } finally {
+      setIsVerifyingPassword(false);
+      setPasswordAuthTarget(null);
+      setPasswordAuthAction(null);
+      setAuthPassword("");
+    }
   };
 
   // 保存処理
@@ -190,6 +263,10 @@ export default function SettingsPage() {
         } else if (formData.password) {
           updateData.password = formData.password;
         }
+        // パスワード付きプロバイダーの場合は現在のパスワードを送信
+        if (formData.currentPassword) {
+          updateData.currentPassword = formData.currentPassword;
+        }
         await aiProviderApi.update(editingProvider.id, updateData);
         toast.success("AIプロバイダーを更新しました");
       } else {
@@ -224,10 +301,13 @@ export default function SettingsPage() {
 
     setIsDeleting(true);
     try {
-      await aiProviderApi.delete(deletingProvider.id);
+      // パスワード付きプロバイダーの場合はパスワードを渡す
+      const password = deletingProvider.hasPassword ? formData.currentPassword : undefined;
+      await aiProviderApi.delete(deletingProvider.id, password);
       toast.success("AIプロバイダーを削除しました");
       setIsDeleteDialogOpen(false);
       setDeletingProvider(null);
+      setFormData((prev) => ({ ...prev, currentPassword: "" }));
       fetchProviders();
     } catch (error) {
       console.error("Failed to delete provider:", error);
@@ -386,14 +466,14 @@ export default function SettingsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleOpenEditDialog(provider)}
+                      onClick={() => handleEditClick(provider)}
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleOpenDeleteDialog(provider)}
+                      onClick={() => handleDeleteClick(provider)}
                       disabled={provider.isActive}
                       title={
                         provider.isActive
@@ -617,6 +697,60 @@ export default function SettingsPage() {
             >
               {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               削除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* パスワード認証ダイアログ */}
+      <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="h-5 w-5" />
+              パスワード認証
+            </DialogTitle>
+            <DialogDescription>
+              「{passwordAuthTarget?.name}」を
+              {passwordAuthAction === "edit" ? "編集" : "削除"}
+              するには、利用パスワードを入力してください。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="authPassword">パスワード</Label>
+            <Input
+              id="authPassword"
+              type="password"
+              value={authPassword}
+              onChange={(e) => setAuthPassword(e.target.value)}
+              placeholder="利用パスワードを入力"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && authPassword) {
+                  handlePasswordAuth();
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsPasswordDialogOpen(false);
+                setPasswordAuthTarget(null);
+                setPasswordAuthAction(null);
+                setAuthPassword("");
+              }}
+            >
+              キャンセル
+            </Button>
+            <Button
+              onClick={handlePasswordAuth}
+              disabled={!authPassword || isVerifyingPassword}
+            >
+              {isVerifyingPassword && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              認証
             </Button>
           </DialogFooter>
         </DialogContent>

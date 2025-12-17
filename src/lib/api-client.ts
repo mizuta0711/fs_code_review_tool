@@ -111,6 +111,7 @@ export interface UpdateAIProviderInput {
   deployment?: string;
   model?: string;
   password?: string;
+  currentPassword?: string;
 }
 
 // AI Provider API
@@ -143,8 +144,11 @@ export const aiProviderApi = {
     return handleResponse<AIProviderListItem>(response);
   },
 
-  delete: async (id: string): Promise<void> => {
-    const response = await fetch(`/api/ai-providers/${id}`, {
+  delete: async (id: string, password?: string): Promise<void> => {
+    const url = password
+      ? `/api/ai-providers/${id}?password=${encodeURIComponent(password)}`
+      : `/api/ai-providers/${id}`;
+    const response = await fetch(url, {
       method: "DELETE",
     });
     if (!response.ok) {
@@ -160,13 +164,14 @@ export const aiProviderApi = {
     return handleResponse<AIProviderListItem>(response);
   },
 
-  verifyPassword: async (id: string, password: string): Promise<{ valid: boolean }> => {
+  verifyPassword: async (id: string, password: string): Promise<boolean> => {
     const response = await fetch(`/api/ai-providers/${id}/verify-password`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password }),
     });
-    return handleResponse<{ valid: boolean }>(response);
+    const result = await handleResponse<{ valid: boolean }>(response);
+    return result.valid;
   },
 };
 
