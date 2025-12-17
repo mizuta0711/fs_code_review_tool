@@ -1,0 +1,47 @@
+{
+  "env": {
+    "API_TIMEOUT_MS": "600000"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Bash(rm:*)",
+      "Bash(npm run lint)",
+      "Bash(npx tsc:*)",
+      "Bash(npm install:*)",
+      "Bash(npx prisma:*)",
+      "Bash(mkdir:*)",
+      "Bash(grep:*)",
+      "Bash(timeout 30s npm run build)",
+      "Bash(touch:*)",
+      "Bash(npx:*)",
+      "Bash(find:*)",
+      "Bash(npm run dev:*)",
+      "Bash(git restore:*)",
+      "Bash(git add:*)",
+      "Bash(ls:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(node:*)",
+      "Bash(npm test:*)",
+      "Bash(git commit:*)",
+      "Bash(curl:*)",
+      "Bash(rg:*)",
+      "Bash(git checkout:*)",
+      "Bash(timeout 60s npm run build)",
+      "Bash(git log:*)",
+      "Bash(mv:*)",
+      "Bash(npm run lint:*)",
+      "Bash(dir:*)",
+      "Bash(cp:*)",
+      "Bash(npm run:*)",
+      "Bash(timeout 30s npx tsc --noEmit)",
+      "Bash(cd:*)",
+      "Bash(timeout:*)",
+      "Bash(git config:*)",
+      "Bash(git push:*)"
+    ],
+    "deny": [],
+    "defaultMode": "acceptEdits"
+  }
+}
