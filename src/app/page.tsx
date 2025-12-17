@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,16 +28,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { promptsApi, reviewApi, type Prompt } from "@/lib/api-client";
 
 // Monaco Editorを動的インポート（SSR無効）
 const Editor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
-
-// モック用のプロンプトデータ
-const mockPrompts = [
-  { id: "1", name: "Java基本レビュー" },
-  { id: "2", name: "中級編AIコードレビュープロンプト" },
-  { id: "3", name: "TypeScriptレビュー" },
-];
 
 // ファイル拡張子から言語を判定
 const getLanguageFromFileName = (fileName: string): string => {
@@ -86,12 +80,35 @@ export default function Home() {
   const [selectedPrompt, setSelectedPrompt] = useState<string>("");
   const [isReviewing, setIsReviewing] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [prompts, setPrompts] = useState<Prompt[]>([]);
+  const [isLoadingPrompts, setIsLoadingPrompts] = useState(true);
   const dropZoneRef = useRef<HTMLDivElement>(null);
 
   const activeFile = files.find((f) => f.id === activeFileId);
   const hasReviewResults = files.some((f) => f.reviewedContent !== null);
   const filesWithContent = files.filter((f) => f.content.trim());
   const reviewedFiles = files.filter((f) => f.reviewedContent);
+
+  // プロンプト一覧を取得
+  useEffect(() => {
+    const fetchPrompts = async () => {
+      try {
+        const data = await promptsApi.list();
+        setPrompts(data);
+        // デフォルトプロンプトを選択
+        const defaultPrompt = data.find((p) => p.isDefault);
+        if (defaultPrompt) {
+          setSelectedPrompt(defaultPrompt.id);
+        }
+      } catch (error) {
+        console.error("Failed to fetch prompts:", error);
+        toast.error("プロンプトの取得に失敗しました");
+      } finally {
+        setIsLoadingPrompts(false);
+      }
+    };
+    fetchPrompts();
+  }, []);
 
   // ファイル追加
   const addFile = () => {
@@ -228,41 +245,38 @@ export default function Home() {
 
     setIsReviewing(true);
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      const result = await reviewApi.execute(
+        filesWithContent.map((f) => ({
+          name: f.name,
+          language: f.language,
+          content: f.content,
+        })),
+        selectedPrompt
+      );
 
-    setFiles(
-      files.map((file) => {
-        if (!file.content.trim()) return file;
+      // レビュー結果をファイルに反映
+      setFiles(
+        files.map((file) => {
+          const reviewed = result.reviewedFiles.find((r) => r.name === file.name);
+          if (reviewed) {
+            return { ...file, reviewedContent: reviewed.content };
+          }
+          return file;
+        })
+      );
 
-        const mockResult = `// =============================================
-// AIレビュー結果: ${file.name}
-// =============================================
-
-${file.content}
-
-/*
- * ========================================
- * レビューコメント
- * ========================================
- *
- * [必須] Line 5: 変数名をより具体的に
- *   例: "data" → "userInputData"
- *
- * [意見] Line 12: メソッド分割を推奨
- *   この処理は別メソッドに切り出すと可読性向上
- *
- * [参考] Line 20: null チェック追加を推奨
- *   例: if (value != null) { ... }
- */`;
-
-        return { ...file, reviewedContent: mockResult };
-      })
-    );
-
-    setIsReviewing(false);
-    setViewMode("result");
-    setActiveFileId(filesWithContent[0].id);
-    toast.success(`${filesWithContent.length}ファイルのレビュー完了`);
+      setViewMode("result");
+      setActiveFileId(filesWithContent[0].id);
+      toast.success(`${filesWithContent.length}ファイルのレビュー完了`);
+    } catch (error) {
+      console.error("Review failed:", error);
+      toast.error(
+        error instanceof Error ? error.message : "レビューの実行に失敗しました"
+      );
+    } finally {
+      setIsReviewing(false);
+    }
   };
 
   // コピー
@@ -333,12 +347,13 @@ ${file.content}
           <div className="flex items-center gap-3">
             <Select value={selectedPrompt} onValueChange={setSelectedPrompt}>
               <SelectTrigger className="w-[240px]">
-                <SelectValue placeholder="プロンプトを選択" />
+                <SelectValue placeholder={isLoadingPrompts ? "読み込み中..." : "プロンプトを選択"} />
               </SelectTrigger>
               <SelectContent>
-                {mockPrompts.map((p) => (
+                {prompts.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.name}
+                    {p.isDefault && " (デフォルト)"}
                   </SelectItem>
                 ))}
               </SelectContent>

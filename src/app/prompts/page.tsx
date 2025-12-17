@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,83 +23,38 @@ import {
   Star,
   StarOff,
   FileText,
+  Loader2,
 } from "lucide-react";
-
-// モック用のプロンプトデータ
-interface Prompt {
-  id: string;
-  name: string;
-  description: string;
-  content: string;
-  isDefault: boolean;
-  createdAt: string;
-}
-
-const initialPrompts: Prompt[] = [
-  {
-    id: "1",
-    name: "Java基本レビュー",
-    description: "Javaコードの基本的なレビューを行います",
-    content: `あなたはJavaのコードレビュアーです。
-以下のコードをレビューしてください。
-
-【レビュー観点】
-- コーディング規約の遵守
-- 可読性
-- 基本的なバグの有無
-
-【出力形式】
-コード内にコメントとしてレビュー結果を記載してください。`,
-    isDefault: true,
-    createdAt: "2024-01-15",
-  },
-  {
-    id: "2",
-    name: "中級Javaレビュー",
-    description: "より詳細なJavaコードレビューを行います",
-    content: `あなたは経験豊富なJavaエンジニアです。
-以下のコードを詳細にレビューしてください。
-
-【レビュー観点】
-- 設計パターンの適切な使用
-- SOLID原則の遵守
-- パフォーマンス
-- セキュリティ
-- テスタビリティ
-
-【出力形式】
-コード内にコメントとしてレビュー結果を記載してください。`,
-    isDefault: false,
-    createdAt: "2024-01-20",
-  },
-  {
-    id: "3",
-    name: "TypeScriptレビュー",
-    description: "TypeScriptコードのレビューを行います",
-    content: `あなたはTypeScriptのエキスパートです。
-以下のコードをレビューしてください。
-
-【レビュー観点】
-- 型安全性
-- ベストプラクティス
-- 可読性
-
-【出力形式】
-コード内にコメントとしてレビュー結果を記載してください。`,
-    isDefault: false,
-    createdAt: "2024-02-01",
-  },
-];
+import { toast } from "sonner";
+import { promptsApi, type Prompt, ApiError } from "@/lib/api-client";
 
 export default function PromptsPage() {
-  const [prompts, setPrompts] = useState<Prompt[]>(initialPrompts);
+  const [prompts, setPrompts] = useState<Prompt[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     content: "",
   });
+
+  // プロンプト一覧を取得
+  useEffect(() => {
+    const fetchPrompts = async () => {
+      try {
+        const data = await promptsApi.list();
+        setPrompts(data);
+      } catch (error) {
+        console.error("Failed to fetch prompts:", error);
+        toast.error("プロンプトの取得に失敗しました");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchPrompts();
+  }, []);
 
   // ダイアログを開く（新規作成）
   const openNewDialog = () => {
@@ -113,50 +68,97 @@ export default function PromptsPage() {
     setEditingPrompt(prompt);
     setFormData({
       name: prompt.name,
-      description: prompt.description,
+      description: prompt.description || "",
       content: prompt.content,
     });
     setIsDialogOpen(true);
   };
 
   // 保存
-  const handleSave = () => {
-    if (editingPrompt) {
-      // 編集
-      setPrompts(
-        prompts.map((p) =>
-          p.id === editingPrompt.id
-            ? { ...p, ...formData }
-            : p
-        )
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      if (editingPrompt) {
+        // 編集
+        const updated = await promptsApi.update(editingPrompt.id, {
+          name: formData.name,
+          description: formData.description || undefined,
+          content: formData.content,
+        });
+        setPrompts(prompts.map((p) => (p.id === updated.id ? updated : p)));
+        toast.success("プロンプトを更新しました");
+      } else {
+        // 新規作成
+        const created = await promptsApi.create({
+          name: formData.name,
+          description: formData.description || undefined,
+          content: formData.content,
+        });
+        setPrompts([...prompts, created]);
+        toast.success("プロンプトを作成しました");
+      }
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error("Failed to save prompt:", error);
+      toast.error(
+        error instanceof ApiError ? error.message : "保存に失敗しました"
       );
-    } else {
-      // 新規作成
-      const newPrompt: Prompt = {
-        id: String(Date.now()),
-        ...formData,
-        isDefault: false,
-        createdAt: new Date().toISOString().split("T")[0],
-      };
-      setPrompts([...prompts, newPrompt]);
+    } finally {
+      setIsSaving(false);
     }
-    setIsDialogOpen(false);
   };
 
   // 削除
-  const handleDelete = (id: string) => {
-    setPrompts(prompts.filter((p) => p.id !== id));
+  const handleDelete = async (id: string) => {
+    const prompt = prompts.find((p) => p.id === id);
+    if (prompt?.isDefault) {
+      toast.error("デフォルトプロンプトは削除できません");
+      return;
+    }
+
+    try {
+      await promptsApi.delete(id);
+      setPrompts(prompts.filter((p) => p.id !== id));
+      toast.success("プロンプトを削除しました");
+    } catch (error) {
+      console.error("Failed to delete prompt:", error);
+      toast.error(
+        error instanceof ApiError ? error.message : "削除に失敗しました"
+      );
+    }
   };
 
   // デフォルト設定
-  const toggleDefault = (id: string) => {
-    setPrompts(
-      prompts.map((p) => ({
-        ...p,
-        isDefault: p.id === id ? !p.isDefault : false,
-      }))
-    );
+  const toggleDefault = async (id: string) => {
+    try {
+      const updated = await promptsApi.setDefault(id);
+      setPrompts(
+        prompts.map((p) => ({
+          ...p,
+          isDefault: p.id === updated.id,
+        }))
+      );
+      toast.success("デフォルトプロンプトを設定しました");
+    } catch (error) {
+      console.error("Failed to set default:", error);
+      toast.error(
+        error instanceof ApiError ? error.message : "設定に失敗しました"
+      );
+    }
   };
+
+  // 日付フォーマット
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("ja-JP");
+  };
+
+  if (isLoading) {
+    return (
+      <div className="container flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="container space-y-6">
@@ -224,8 +226,18 @@ export default function PromptsPage() {
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                 キャンセル
               </Button>
-              <Button onClick={handleSave} disabled={!formData.name || !formData.content}>
-                保存
+              <Button
+                onClick={handleSave}
+                disabled={!formData.name || !formData.content || isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    保存中...
+                  </>
+                ) : (
+                  "保存"
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -251,7 +263,7 @@ export default function PromptsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground line-clamp-2">
-                {prompt.description}
+                {prompt.description || "説明なし"}
               </p>
               <div className="rounded-md bg-muted p-2">
                 <pre className="text-xs text-muted-foreground line-clamp-4 whitespace-pre-wrap">
@@ -260,14 +272,15 @@ export default function PromptsPage() {
               </div>
               <div className="flex items-center justify-between pt-2 border-t">
                 <span className="text-xs text-muted-foreground">
-                  作成日: {prompt.createdAt}
+                  作成日: {formatDate(prompt.createdAt)}
                 </span>
                 <div className="flex gap-1">
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => toggleDefault(prompt.id)}
-                    title={prompt.isDefault ? "デフォルトを解除" : "デフォルトに設定"}
+                    title={prompt.isDefault ? "デフォルト（変更不可）" : "デフォルトに設定"}
+                    disabled={prompt.isDefault}
                   >
                     {prompt.isDefault ? (
                       <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
@@ -287,6 +300,7 @@ export default function PromptsPage() {
                     size="icon"
                     onClick={() => handleDelete(prompt.id)}
                     className="text-destructive hover:text-destructive"
+                    disabled={prompt.isDefault}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

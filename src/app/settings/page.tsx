@@ -1,88 +1,73 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
   Save,
-  TestTube,
+  Loader2,
   CheckCircle2,
   XCircle,
-  Loader2,
-  Eye,
-  EyeOff,
+  AlertCircle,
 } from "lucide-react";
+import { settingsApi, type Settings, ApiError } from "@/lib/api-client";
 
-type AIProvider = "gemini" | "azure";
-
-interface Settings {
-  provider: AIProvider;
-  gemini: {
-    apiKey: string;
-  };
-  azure: {
-    endpoint: string;
-    apiKey: string;
-    deploymentName: string;
-  };
-}
+type AIProvider = "gemini" | "azure-openai";
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Settings>({
-    provider: "gemini",
-    gemini: {
-      apiKey: "",
-    },
-    azure: {
-      endpoint: "",
-      apiKey: "",
-      deploymentName: "",
-    },
-  });
-  const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<"success" | "error" | null>(null);
-  const [showGeminiKey, setShowGeminiKey] = useState(false);
-  const [showAzureKey, setShowAzureKey] = useState(false);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<AIProvider>("gemini");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // 接続テスト（モック）
-  const handleTest = async () => {
-    setIsTesting(true);
-    setTestResult(null);
+  // 設定を取得
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const data = await settingsApi.get();
+        setSettings(data);
+        setSelectedProvider(data.aiProvider);
+      } catch (error) {
+        console.error("Failed to fetch settings:", error);
+        toast.error("設定の取得に失敗しました");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchSettings();
+  }, []);
 
-    // モックのテスト結果（1.5秒後に表示）
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    // APIキーが設定されていればsuccess、なければerror
-    const isValid =
-      settings.provider === "gemini"
-        ? settings.gemini.apiKey.length > 0
-        : settings.azure.endpoint.length > 0 && settings.azure.apiKey.length > 0;
-
-    setTestResult(isValid ? "success" : "error");
-    setIsTesting(false);
-
-    if (isValid) {
-      toast.success("接続テスト成功", {
-        description: "AIサービスへの接続が確認できました",
-      });
-    } else {
-      toast.error("接続テスト失敗", {
-        description: "必要な設定項目を入力してください",
-      });
+  // 保存
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const updated = await settingsApi.update({ aiProvider: selectedProvider });
+      setSettings(updated);
+      toast.success("設定を保存しました");
+    } catch (error) {
+      console.error("Failed to save settings:", error);
+      toast.error(
+        error instanceof ApiError ? error.message : "保存に失敗しました"
+      );
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  // 保存（モック）
-  const handleSave = () => {
-    toast.success("設定を保存しました", {
-      description: "AI設定が正常に保存されました",
-    });
-  };
+  if (isLoading) {
+    return (
+      <div className="container flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const geminiConfigured = settings?.providerStatus?.gemini?.configured ?? false;
+  const azureConfigured = settings?.providerStatus?.["azure-openai"]?.configured ?? false;
 
   return (
     <div className="container space-y-6 max-w-2xl">
@@ -104,10 +89,8 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent>
           <RadioGroup
-            value={settings.provider}
-            onValueChange={(value: AIProvider) =>
-              setSettings({ ...settings, provider: value })
-            }
+            value={selectedProvider}
+            onValueChange={(value: AIProvider) => setSelectedProvider(value)}
             className="space-y-4"
           >
             <div className="flex items-center space-x-3 rounded-lg border p-4 cursor-pointer hover:bg-muted/50">
@@ -118,195 +101,119 @@ export default function SettingsPage() {
                   Google AI Studioで取得したAPIキーを使用
                 </div>
               </Label>
-              {settings.provider === "gemini" && (
-                <Badge variant="default">選択中</Badge>
-              )}
+              <div className="flex items-center gap-2">
+                {geminiConfigured ? (
+                  <Badge variant="outline" className="text-green-600 border-green-600">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    設定済み
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                    <AlertCircle className="h-3 w-3 mr-1" />
+                    未設定
+                  </Badge>
+                )}
+                {selectedProvider === "gemini" && (
+                  <Badge variant="default">選択中</Badge>
+                )}
+              </div>
             </div>
             <div className="flex items-center space-x-3 rounded-lg border p-4 cursor-pointer hover:bg-muted/50">
-              <RadioGroupItem value="azure" id="azure" />
-              <Label htmlFor="azure" className="flex-1 cursor-pointer">
+              <RadioGroupItem value="azure-openai" id="azure-openai" />
+              <Label htmlFor="azure-openai" className="flex-1 cursor-pointer">
                 <div className="font-medium">Azure OpenAI</div>
                 <div className="text-sm text-muted-foreground">
                   Azure OpenAI Serviceを使用
                 </div>
               </Label>
-              {settings.provider === "azure" && (
-                <Badge variant="default">選択中</Badge>
-              )}
+              <div className="flex items-center gap-2">
+                {azureConfigured ? (
+                  <Badge variant="outline" className="text-green-600 border-green-600">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    設定済み
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                    <AlertCircle className="h-3 w-3 mr-1" />
+                    未設定
+                  </Badge>
+                )}
+                {selectedProvider === "azure-openai" && (
+                  <Badge variant="default">選択中</Badge>
+                )}
+              </div>
             </div>
           </RadioGroup>
         </CardContent>
       </Card>
 
-      {/* Gemini設定 */}
-      {settings.provider === "gemini" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Gemini設定</CardTitle>
-            <CardDescription>
-              Google AI StudioからAPIキーを取得して設定してください
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="gemini-api-key">APIキー</Label>
-              <div className="relative">
-                <Input
-                  id="gemini-api-key"
-                  type={showGeminiKey ? "text" : "password"}
-                  value={settings.gemini.apiKey}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      gemini: { ...settings.gemini, apiKey: e.target.value },
-                    })
-                  }
-                  placeholder="AIza..."
-                  className="pr-10"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-0 top-0 h-full px-3"
-                  onClick={() => setShowGeminiKey(!showGeminiKey)}
-                >
-                  {showGeminiKey ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                <a
-                  href="https://aistudio.google.com/app/apikey"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  Google AI Studio
-                </a>
-                でAPIキーを取得できます
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* 環境変数の設定案内 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>API キーの設定</CardTitle>
+          <CardDescription>
+            APIキーはセキュリティのため環境変数で設定します
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-md bg-muted p-4">
+            <p className="text-sm font-medium mb-2">Gemini の場合:</p>
+            <pre className="text-xs text-muted-foreground">
+              GEMINI_API_KEY=&quot;your-api-key&quot;
+            </pre>
+          </div>
+          <div className="rounded-md bg-muted p-4">
+            <p className="text-sm font-medium mb-2">Azure OpenAI の場合:</p>
+            <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
+{`AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/"
+AZURE_OPENAI_API_KEY="your-api-key"
+AZURE_OPENAI_DEPLOYMENT="gpt-4o"`}
+            </pre>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            これらの環境変数を <code>.env.local</code> ファイルに設定してください。
+            設定後はアプリケーションの再起動が必要です。
+          </p>
+        </CardContent>
+      </Card>
 
-      {/* Azure OpenAI設定 */}
-      {settings.provider === "azure" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Azure OpenAI設定</CardTitle>
-            <CardDescription>
-              Azureポータルから取得した情報を設定してください
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="azure-endpoint">エンドポイント</Label>
-              <Input
-                id="azure-endpoint"
-                type="text"
-                value={settings.azure.endpoint}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    azure: { ...settings.azure, endpoint: e.target.value },
-                  })
-                }
-                placeholder="https://your-resource.openai.azure.com/"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="azure-api-key">APIキー</Label>
-              <div className="relative">
-                <Input
-                  id="azure-api-key"
-                  type={showAzureKey ? "text" : "password"}
-                  value={settings.azure.apiKey}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      azure: { ...settings.azure, apiKey: e.target.value },
-                    })
-                  }
-                  placeholder="••••••••••••••••"
-                  className="pr-10"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-0 top-0 h-full px-3"
-                  onClick={() => setShowAzureKey(!showAzureKey)}
-                >
-                  {showAzureKey ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="azure-deployment">デプロイメント名</Label>
-              <Input
-                id="azure-deployment"
-                type="text"
-                value={settings.azure.deploymentName}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    azure: { ...settings.azure, deploymentName: e.target.value },
-                  })
-                }
-                placeholder="gpt-4o"
-              />
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 接続テストと保存 */}
+      {/* 保存ボタン */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="outline"
-                onClick={handleTest}
-                disabled={isTesting}
-              >
-                {isTesting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    テスト中...
-                  </>
-                ) : (
-                  <>
-                    <TestTube className="mr-2 h-4 w-4" />
-                    接続テスト
-                  </>
-                )}
-              </Button>
-              {testResult === "success" && (
-                <div className="flex items-center gap-1 text-green-600">
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span className="text-sm">接続成功</span>
-                </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              {selectedProvider === "gemini" && !geminiConfigured && (
+                <>
+                  <XCircle className="h-4 w-4 text-yellow-600" />
+                  <span>GEMINI_API_KEY が設定されていません</span>
+                </>
               )}
-              {testResult === "error" && (
-                <div className="flex items-center gap-1 text-red-600">
-                  <XCircle className="h-4 w-4" />
-                  <span className="text-sm">接続失敗</span>
-                </div>
+              {selectedProvider === "azure-openai" && !azureConfigured && (
+                <>
+                  <XCircle className="h-4 w-4 text-yellow-600" />
+                  <span>Azure OpenAI の環境変数が設定されていません</span>
+                </>
+              )}
+              {((selectedProvider === "gemini" && geminiConfigured) ||
+                (selectedProvider === "azure-openai" && azureConfigured)) && (
+                <>
+                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  <span>API設定完了</span>
+                </>
               )}
             </div>
-            <Button onClick={handleSave}>
-              <Save className="mr-2 h-4 w-4" />
-              設定を保存
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  保存中...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  設定を保存
+                </>
+              )}
             </Button>
           </div>
         </CardContent>
