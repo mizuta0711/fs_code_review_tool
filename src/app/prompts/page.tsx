@@ -177,7 +177,7 @@ export default function PromptsPage() {
               新規作成
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="w-[90vw] max-w-none sm:max-w-none max-h-[90vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>
                 {editingPrompt ? "プロンプトを編集" : "新規プロンプト作成"}
@@ -186,7 +186,7 @@ export default function PromptsPage() {
                 レビューに使用するプロンプトテンプレートを設定します
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 overflow-y-auto flex-1">
               <div className="space-y-2">
                 <Label htmlFor="name">名前</Label>
                 <Input
