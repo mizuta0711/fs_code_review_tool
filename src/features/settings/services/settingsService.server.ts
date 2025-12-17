@@ -4,9 +4,12 @@
  */
 import { settingsRepository } from "../repositories/settingsRepository.server";
 import { AI_PROVIDERS } from "@/lib/constants";
+import { logger, createTimer } from "@/lib/logger";
 import type { Setting } from "@prisma/client";
 import type { UpdateSettingsInput } from "@/lib/validation/settings";
 import type { ProviderStatusMap, SettingsResponse } from "@/types/settings";
+
+const SERVICE_NAME = "settingsService";
 
 /**
  * プロバイダーの設定状態を取得
@@ -36,8 +39,15 @@ export const settingsService = {
    * @returns 設定とプロバイダー状態
    */
   get: async (): Promise<SettingsResponse> => {
+    const timer = createTimer();
+    logger.serviceStart(SERVICE_NAME, "get");
+
     const setting = await settingsRepository.findOrCreate();
     const providerStatus = getProviderStatus();
+
+    logger.serviceEnd(SERVICE_NAME, "get", timer.elapsed(), {
+      provider: setting.aiProvider,
+    });
 
     return {
       ...setting,
@@ -51,7 +61,14 @@ export const settingsService = {
    * @returns 更新された設定
    */
   update: async (input: UpdateSettingsInput): Promise<Setting> => {
-    return settingsRepository.upsert(input);
+    const timer = createTimer();
+    logger.serviceStart(SERVICE_NAME, "update", { provider: input.aiProvider });
+
+    const setting = await settingsRepository.upsert(input);
+
+    logger.serviceEnd(SERVICE_NAME, "update", timer.elapsed());
+    logger.info("Settings updated", { provider: setting.aiProvider });
+    return setting;
   },
 
   /**
@@ -59,7 +76,14 @@ export const settingsService = {
    * @returns AIプロバイダー名
    */
   getCurrentProvider: async (): Promise<string> => {
+    const timer = createTimer();
+    logger.serviceStart(SERVICE_NAME, "getCurrentProvider");
+
     const setting = await settingsRepository.findOrCreate();
+
+    logger.serviceEnd(SERVICE_NAME, "getCurrentProvider", timer.elapsed(), {
+      provider: setting.aiProvider,
+    });
     return setting.aiProvider;
   },
 

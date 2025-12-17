@@ -551,65 +551,56 @@ export async function POST(request: NextRequest) {
 
 ## 5. 実装優先順位
 
-| 優先度 | Phase | 内容 | 影響範囲 |
-|--------|-------|------|----------|
-| 高 | Phase 1.1 | 定数ファイル作成 | 全API |
-| 高 | Phase 1.2 | 型定義ファイル作成 | 全API |
-| 高 | Phase 1.3 | Zodスキーマ作成 | 全API |
-| 高 | Phase 1.4 | API共通ヘルパー作成 | 全API |
-| 中 | Phase 2.1 | プロンプトRepository | prompts API |
-| 中 | Phase 2.2 | 設定Repository | settings API |
-| 中 | Phase 3.1 | プロンプトService | prompts API |
-| 中 | Phase 3.2 | レビューService | review API |
-| 低 | Phase 4 | APIルートリファクタリング | 全API |
+| 優先度 | Phase | 内容 | 影響範囲 | 状態 |
+|--------|-------|------|----------|------|
+| 高 | Phase 1.1 | 定数ファイル作成 | 全API | ✅ 完了 |
+| 高 | Phase 1.2 | 型定義ファイル作成 | 全API | ✅ 完了 |
+| 高 | Phase 1.3 | Zodスキーマ作成 | 全API | ✅ 完了 |
+| 高 | Phase 1.4 | API共通ヘルパー作成 | 全API | ✅ 完了 |
+| 中 | Phase 2.1 | プロンプトRepository | prompts API | ✅ 完了 |
+| 中 | Phase 2.2 | 設定Repository | settings API | ✅ 完了 |
+| 中 | Phase 3.1 | プロンプトService | prompts API | ✅ 完了 |
+| 中 | Phase 3.2 | レビューService | review API | ✅ 完了 |
+| 低 | Phase 4 | APIルートリファクタリング | 全API | ✅ 完了 |
+| - | Phase 5 | ロギング追加 | 全Service | ✅ 完了 |
 
 ---
 
 ## 6. 追加の改善提案
 
-### 6.1 エラーハンドリングの統一
+### 6.1 エラーハンドリングの統一 ✅ 完了
 カスタムエラークラスを作成し、APIルートで統一的にハンドリング
 
+**実装ファイル**: `src/lib/api-helpers.ts`
+
 ```typescript
-// src/lib/errors.ts
-export class AppError extends Error {
-  constructor(
-    message: string,
-    public statusCode: number = 500,
-    public code?: string
-  ) {
-    super(message);
-    this.name = "AppError";
-  }
-}
-
-export class NotFoundError extends AppError {
-  constructor(resource: string) {
-    super(`${resource}が見つかりません`, 404, "NOT_FOUND");
-    this.name = "NotFoundError";
-  }
-}
-
-export class ValidationError extends AppError {
-  constructor(message: string) {
-    super(message, 400, "VALIDATION_ERROR");
-    this.name = "ValidationError";
-  }
-}
+// AppError, NotFoundError, ValidationError, BusinessError クラス
+// handleApiError 関数で統一的なエラーハンドリング
 ```
 
-### 6.2 ロギングの追加
+### 6.2 ロギングの追加 ✅ 完了
 - 構造化ログの導入
 - リクエスト/レスポンスのログ記録
 - エラーログの詳細化
 
+**実装ファイル**: `src/lib/logger.ts`
+
+```typescript
+// logger オブジェクト - debug, info, warn, error, apiRequest, apiResponse, serviceStart, serviceEnd, dbOperation
+// createTimer - 処理時間計測ユーティリティ
+// generateRequestId - リクエストID生成
+```
+
 ### 6.3 テストの追加
+**※ 今回のリファクタリングでは対応不要**
+
 - Repository層のユニットテスト
 - Service層のユニットテスト
 - APIルートの統合テスト
 
-### 6.4 トランザクション処理の改善
+### 6.4 トランザクション処理の改善 ✅ 完了
 - 複数テーブルを操作する処理でのトランザクション活用
+- `promptRepository.setDefault` でトランザクション使用
 
 ---
 
